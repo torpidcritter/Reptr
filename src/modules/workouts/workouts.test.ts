@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, testDatabaseUrl } from "@/db/test/test-db";
+import { exerciseRecords, recordsForWorkout } from "@/modules/analytics/records";
 import { getRoutine, routineSchema, saveRoutine } from "@/modules/routines/routines";
 import { isSetFilled, summarize, workoutSnapshotSchema, type WorkoutSnapshot } from "./snapshot";
 import { emptyWorkout, exerciseFor, plannedSets, workoutFromRoutine } from "./start";
@@ -203,6 +204,31 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     await saveWorkoutSnapshot(t.db, alice, b);
     expect((await getActiveWorkout(t.db, alice))!.id).toBe(b.id);
     expect((await getWorkout(t.db, alice, a.id))!.status).toBe("abandoned");
+  });
+
+  it("stores personal records when a workout is finished", async () => {
+    const first = await exerciseRecords(t.db, alice, ex["barbell-bench-press"].id);
+    expect(Object.fromEntries(first.map((r) => [r.type, r.value]))).toEqual({
+      heaviest_weight: 60,
+      best_e1rm: 76,
+      best_set_volume: 480,
+    });
+
+    const w = emptyWorkout();
+    w.exercises.push(exerciseFor(bench(), { sets: 2 }));
+    w.exercises[0].sets[0] = { ...w.exercises[0].sets[0], weightKg: 65, reps: 3 };
+    w.exercises[0].sets[1] = { ...w.exercises[0].sets[1], weightKg: 40, reps: 20, type: "warmup" };
+    done(w, 0);
+    w.status = "completed";
+    w.finishedAt = new Date().toISOString();
+    await saveWorkoutSnapshot(t.db, alice, w);
+    await saveWorkoutSnapshot(t.db, alice, w); // a retry doesn't double up
+
+    const prs = await recordsForWorkout(t.db, alice, w.id);
+    expect(Object.values(prs)).toEqual([["heaviest_weight"]]);
+    const now = await exerciseRecords(t.db, alice, ex["barbell-bench-press"].id);
+    expect(now.find((r) => r.type === "heaviest_weight")!.value).toBe(65);
+    expect(await exerciseRecords(t.db, bob, ex["barbell-bench-press"].id)).toEqual([]);
   });
 
   it("won't let another user overwrite a workout", async () => {
