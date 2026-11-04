@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { seed } from "./seed/seed";
 
 // Runs against a throwaway local Postgres: TEST_DATABASE_URL=postgres://... pnpm test
 const url = process.env.TEST_DATABASE_URL;
@@ -29,8 +30,7 @@ describe.skipIf(!url)("database schema and row-level security", () => {
     await sql.unsafe(readFileSync("src/db/test/supabase-shim.sql", "utf8"));
     await migrate(drizzle(sql), { migrationsFolder: "src/db/migrations" });
     await sql`insert into auth.users (id, email) values (${alice}, 'alice@test'), (${bob}, 'bob@test')`;
-    await sql`insert into muscle_groups (slug, name, region) values ('chest', 'Chest', 'upper')`;
-    await sql`insert into exercises (slug, name, category) values ('bench-press', 'Bench press', 'resistance')`;
+    await seed(sql);
   });
 
   afterAll(async () => {
@@ -49,7 +49,7 @@ describe.skipIf(!url)("database schema and row-level security", () => {
     const weId = randomUUID();
 
     await asUser(alice, async (tx) => {
-      const [bench] = await tx`select id from exercises where slug = 'bench-press'`;
+      const [bench] = await tx`select id from exercises where slug = 'barbell-bench-press'`;
       await tx`insert into workouts (id, user_id, name) values (${workoutId}, ${alice}, 'Push')`;
       await tx`insert into workout_exercises (id, user_id, workout_id, exercise_id, position)
                values (${weId}, ${alice}, ${workoutId}, ${bench.id}, 1)`;
@@ -96,10 +96,13 @@ describe.skipIf(!url)("database schema and row-level security", () => {
       (tx) =>
         tx`insert into exercises (owner_id, name, category) values (${alice}, 'My cable fly', 'resistance')`,
     );
-    const aliceNames = await asUser(alice, (tx) => tx`select name from exercises order by name`);
-    expect(aliceNames.map((r) => r.name)).toEqual(["Bench press", "My cable fly"]);
+    const custom = (rows: postgres.RowList<postgres.Row[]>) =>
+      rows.map((r) => r.name as string).filter((n) => n === "My cable fly");
+    const aliceNames = await asUser(alice, (tx) => tx`select name from exercises`);
+    expect(custom(aliceNames)).toEqual(["My cable fly"]);
     const bobNames = await asUser(bob, (tx) => tx`select name from exercises`);
-    expect(bobNames.map((r) => r.name)).toEqual(["Bench press"]);
+    expect(custom(bobNames)).toEqual([]);
+    expect(bobNames.length).toBeGreaterThanOrEqual(150);
   });
 
   it("does not let users edit built-in exercises or reference data", async () => {
@@ -124,6 +127,19 @@ describe.skipIf(!url)("database schema and row-level security", () => {
           tx`insert into body_metrics (user_id, type, value) values (${alice}, 'body_fat', 90)`,
       ),
     ).rejects.toThrow(/body_metrics_body_fat_range/);
+  });
+
+  it("seeds the library and can be re-run safely", async () => {
+    const before = await sql`select count(*)::int as n from exercise_muscles`;
+    await seed(sql);
+    const after = await sql`select count(*)::int as n from exercise_muscles`;
+    expect(after[0].n).toBe(before[0].n);
+    const [{ n }] = await sql`
+      select count(*)::int as n from exercises e
+      where e.owner_id is null and not exists (
+        select 1 from exercise_muscles m where m.exercise_id = e.id and m.role = 'primary')
+        and e.category in ('resistance', 'bodyweight')`;
+    expect(n).toBe(0);
   });
 
   it("deletes a user's data when their account is deleted", async () => {
