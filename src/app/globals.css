@@ -76,8 +76,13 @@
   --font-sans: var(--font-inter);
 }
 
-* {
-  border-color: var(--border);
+@layer base {
+  /* In the base layer so border colour utilities (e.g. border-accent) can override it. */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 
 body {

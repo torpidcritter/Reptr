@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { MetricChart } from "@/components/charts/metric-chart";
+import { BodyTabs } from "@/components/layout/body-tabs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
@@ -160,7 +161,8 @@ async function Body() {
 export default function PhysiquePage() {
   return (
     <>
-      <PageHeader title="Physique" subtitle="Body weight, measurements and photos" />
+      <PageHeader title="Body" subtitle="Weight, measurements, food and recovery" />
+      <BodyTabs current="/physique" />
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <Body />
       </Suspense>
