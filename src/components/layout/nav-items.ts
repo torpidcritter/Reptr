@@ -4,7 +4,7 @@ export const navItems = [
   { href: "/", label: "Home", icon: House },
   { href: "/train", label: "Train", icon: Dumbbell },
   { href: "/insights", label: "Insights", icon: LineChart },
-  { href: "/physique", label: "Physique", icon: Ruler },
+  { href: "/physique", label: "Body", icon: Ruler },
   { href: "/coach", label: "Coach", icon: Bot },
   { href: "/profile", label: "Profile", icon: User },
 ] as const;
@@ -12,6 +12,7 @@ export const navItems = [
 /** Sub-sections that live under a nav item, e.g. the exercise library under Train. */
 const sections: Record<string, string[]> = {
   "/train": ["/exercises", "/routines", "/workout", "/history"],
+  "/physique": ["/nutrition", "/recovery"],
 };
 
 export function isActive(pathname: string, href: string) {
