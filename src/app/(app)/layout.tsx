@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BottomNav, Sidebar } from "@/components/layout/app-nav";
+import { TimezoneCookie } from "@/components/layout/timezone-cookie";
+import { ActiveWorkoutPill } from "@/components/workout/active-workout-pill";
+import { WorkoutSyncer } from "@/components/workout/workout-syncer";
 import { getProfile, requireUser } from "@/lib/auth";
 
 /** Sends signed-in users who haven't set up their profile to onboarding. The proxy handles signed-out visitors. */
@@ -24,6 +27,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         </main>
       </div>
       <BottomNav />
+      <WorkoutSyncer />
+      <TimezoneCookie />
+      <Suspense fallback={null}>
+        <ActiveWorkoutPill />
+      </Suspense>
     </>
   );
 }

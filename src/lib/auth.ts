@@ -42,3 +42,16 @@ function localDevUser() {
     ReturnType<Awaited<ReturnType<typeof createSupabaseServerClient>>["auth"]["getUser"]>
   >["data"]["user"];
 }
+
+/** The user's time zone from the device, or UTC until the browser has reported it. */
+export async function getTimeZone() {
+  const { cookies } = await import("next/headers");
+  const tz = (await cookies()).get("tz")?.value;
+  if (tz) {
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: tz });
+      return tz;
+    } catch {}
+  }
+  return "UTC";
+}

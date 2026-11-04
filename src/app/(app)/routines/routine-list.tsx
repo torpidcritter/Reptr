@@ -1,4 +1,6 @@
-import { ListChecks } from "lucide-react";
+import { ListChecks, Play } from "lucide-react";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { db } from "@/db";
@@ -30,6 +32,12 @@ export async function RoutineList() {
             <p className="text-muted-foreground mt-2 line-clamp-2 text-sm">
               {r.exerciseNames.join(", ")}
             </p>
+            <Link
+              href={`/workout?routine=${r.id}`}
+              className={buttonVariants({ size: "sm", className: "mt-3" })}
+            >
+              <Play /> Start
+            </Link>
           </div>
           <RoutineMenu id={r.id} name={r.name} />
         </Card>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card } from "@/components/ui/card";
 import { equipmentList, muscles } from "@/db/seed/muscles";
@@ -17,7 +18,9 @@ export default function NewExercisePage() {
     <div className="max-w-2xl">
       <PageHeader title="New exercise" subtitle="Add a movement that isn't in the library" />
       <Card className="p-5">
-        <NewExerciseForm muscles={muscleOptions} equipment={equipmentOptions} />
+        <Suspense fallback={null}>
+          <NewExerciseForm muscles={muscleOptions} equipment={equipmentOptions} />
+        </Suspense>
       </Card>
     </div>
   );
