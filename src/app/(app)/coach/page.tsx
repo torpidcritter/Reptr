@@ -1,19 +1,26 @@
-import { Bot } from "lucide-react";
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
+import { CoachChatLoader } from "./chat-loader";
 
 export const metadata: Metadata = { title: "Coach" };
 
-export default function Page() {
+async function Chat() {
+  await connection(); // whether the key is set is a runtime fact, not a build-time one
+  return <CoachChatLoader enabled={Boolean(process.env.OPENAI_API_KEY)} />;
+}
+
+export default function CoachPage() {
   return (
-    <>
-      <PageHeader title="Coach" subtitle="Your AI training coach" />
-      <EmptyState
-        icon={Bot}
-        title="Coach comes later"
-        body="The AI coach arrives after the tracker has real training data to work from."
+    <div className="mx-auto max-w-3xl">
+      <PageHeader
+        title="Coach"
+        subtitle="Answers from your own data. Changes only happen when you confirm."
       />
-    </>
+      <Suspense fallback={null}>
+        <Chat />
+      </Suspense>
+    </div>
   );
 }

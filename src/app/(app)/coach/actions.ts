@@ -1,0 +1,113 @@
+"use server";
+
+import OpenAI from "openai";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { db } from "@/db";
+import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
+import { localDay } from "@/modules/analytics/insights";
+import { entrySchema, logEntry } from "@/modules/body/body";
+import { type ChatClient, runCoach, systemPrompt } from "@/modules/coach/agent";
+import type { Proposal } from "@/modules/coach/tools";
+import { routineSchema, saveRoutine } from "@/modules/routines/routines";
+
+const historySchema = z
+  .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(8000) }))
+  .min(1)
+  .max(60);
+
+export type CoachReply = { reply?: string; proposals?: Proposal[]; error?: string };
+
+export async function askCoachAction(history: unknown): Promise<CoachReply> {
+  const user = await requireUser();
+  const key = process.env.OPENAI_API_KEY;
+  if (!key)
+    return {
+      error: "The coach needs an OpenAI API key. Add OPENAI_API_KEY to the server's environment.",
+    };
+  const parsed = historySchema.safeParse(history);
+  if (!parsed.success || parsed.data.at(-1)!.role !== "user")
+    return { error: "Something went wrong with that message." };
+
+  const [profile, tz] = await Promise.all([getProfile(user.id), getTimeZone()]);
+  const now = new Date();
+  const system = systemPrompt({
+    name: profile?.displayName ?? null,
+    units: profile?.unitSystem === "imperial" ? "imperial (lb, in)" : "metric (kg, cm)",
+    goal: profile?.goal ?? "all_round",
+    today: `${localDay(now, tz)} (${new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: tz }).format(now)})`,
+  });
+  try {
+    const client = new OpenAI({ apiKey: key }) as unknown as ChatClient;
+    const out = await runCoach(
+      client,
+      process.env.OPENAI_MODEL || "gpt-4.1-mini",
+      { db, userId: user.id, timeZone: tz, now },
+      system,
+      parsed.data,
+    );
+    return { reply: out.reply, proposals: out.proposals };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    return {
+      error:
+        status === 401
+          ? "The OpenAI API key was rejected. Check OPENAI_API_KEY."
+          : status === 429
+            ? "OpenAI is rate-limiting or out of credit. Try again in a minute."
+            : "The coach couldn't answer just now. Try again.",
+    };
+  }
+}
+
+const proposalSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("create_routine"),
+    payload: z.object({
+      name: z.string(),
+      items: z.array(
+        z.object({
+          exerciseId: z.uuid(),
+          targetSets: z.number(),
+          targetRepsMin: z.number(),
+          targetRepsMax: z.number(),
+          restSeconds: z.number().nullable(),
+        }),
+      ),
+    }),
+  }),
+  z.object({
+    kind: z.literal("log_weight"),
+    payload: z.object({ day: z.string(), weightKg: z.number() }),
+  }),
+]);
+
+/** Carries out a change the coach proposed, after the user confirmed it. Re-validated here. */
+export async function confirmProposalAction(
+  proposal: unknown,
+): Promise<{ done?: string; error?: string }> {
+  const user = await requireUser();
+  const p = proposalSchema.safeParse(proposal);
+  if (!p.success) return { error: "That change couldn't be read." };
+  try {
+    if (p.data.kind === "create_routine") {
+      const routine = routineSchema.parse({
+        name: p.data.payload.name,
+        items: p.data.payload.items.map((i) => ({ ...i, supersetGroup: null })),
+      });
+      await saveRoutine(db, user.id, routine);
+      revalidatePath("/routines");
+      return { done: `Saved "${routine.name}" to your routines.` };
+    }
+    const entry = entrySchema.parse({
+      day: p.data.payload.day,
+      values: { weight: p.data.payload.weightKg },
+    });
+    await logEntry(db, user.id, entry);
+    revalidatePath("/physique");
+    revalidatePath("/");
+    return { done: "Weight logged." };
+  } catch {
+    return { error: "That change didn't pass validation, so nothing was saved." };
+  }
+}
