@@ -1,9 +1,12 @@
 "use client";
 
-import { displayWeight, type UnitSystem, weightUnitLabel } from "@/lib/units";
+import { cmToIn, displayWeight, type UnitSystem, weightUnitLabel } from "@/lib/units";
 import { LineChart, type Point } from "./line-chart";
 
-export type MetricKind = "weight" | "reps" | "duration" | "distance" | "volume" | "count";
+export type MetricKind =
+  "weight" | "reps" | "duration" | "distance" | "volume" | "count" | "length" | "percent";
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Formatters live on the client, so server pages pass a kind instead of functions. */
 export function formatMetric(kind: MetricKind, v: number, units: UnitSystem) {
@@ -22,6 +25,10 @@ export function formatMetric(kind: MetricKind, v: number, units: UnitSystem) {
         : `${v}s`;
     case "distance":
       return units === "metric" ? `${(v / 1000).toFixed(1)} km` : `${(v / 1609.344).toFixed(1)} mi`;
+    case "length":
+      return units === "metric" ? `${round1(v)} cm` : `${round1(cmToIn(v))} in`;
+    case "percent":
+      return `${round1(v)}%`;
     case "count":
       return Number.isInteger(v) ? String(v) : v.toFixed(1);
   }
@@ -34,8 +41,12 @@ export function MetricChart({
   name,
   height,
   zeroBased,
+  dots,
+  legend,
 }: {
   points: Point[];
+  dots?: Point[];
+  legend?: { line: string; dots: string };
   kind: MetricKind;
   units: UnitSystem;
   name: string;
@@ -49,6 +60,8 @@ export function MetricChart({
       name={name}
       height={height}
       zeroBased={zeroBased}
+      dots={dots}
+      legend={legend}
       formatY={(v) => formatMetric(kind, v, units)}
       formatX={(x) => day.format(new Date(x))}
     />

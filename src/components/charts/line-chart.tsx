@@ -15,6 +15,10 @@ type Props = {
   color?: string;
   /** Start the y-axis at zero (volume, counts) rather than fitting the data (weights, 1RM). */
   zeroBased?: boolean;
+  /** Raw readings drawn as small muted dots behind the line (e.g. daily weigh-ins). */
+  dots?: Point[];
+  /** Names for the line and the dots; shown as a legend when dots are present. */
+  legend?: { line: string; dots: string };
 };
 
 const pad = { top: 16, right: 16, bottom: 24, left: 44 };
@@ -31,6 +35,8 @@ export function LineChart({
   height = 200,
   color = "var(--chart-1)",
   zeroBased = false,
+  dots = [],
+  legend,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -47,8 +53,8 @@ export function LineChart({
 
   const geo = useMemo(() => {
     if (!points.length || !width) return null;
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
+    const xs = [...points, ...dots].map((p) => p.x);
+    const ys = [...points, ...dots].map((p) => p.y);
     const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
     const lo = zeroBased ? 0 : Math.min(...ys);
     const ticks = niceTicks(lo, Math.max(...ys), 4);
@@ -60,8 +66,9 @@ export function LineChart({
     const pts = points.map((p) => [sx(p.x), sy(p.y)] as const);
     const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x},${y}`).join("");
     const area = `${line}L${pts[pts.length - 1][0]},${sy(y0)}L${pts[0][0]},${sy(y0)}Z`;
-    return { pts, line, area, ticks, sy, base: sy(y0) };
-  }, [points, width, height, zeroBased]);
+    const dotPts = dots.map((p) => [sx(p.x), sy(p.y)] as const);
+    return { pts, dotPts, line, area, ticks, sy, base: sy(y0) };
+  }, [points, dots, width, height, zeroBased]);
 
   const nearest = (clientX: number) => {
     if (!geo || !ref.current) return null;
@@ -74,9 +81,10 @@ export function LineChart({
   };
 
   const last = points.length - 1;
+  const rawAt = (x: number) => dots.find((d) => d.x === x);
   const shown = active ?? null;
 
-  return (
+  const chart = (
     <div
       ref={ref}
       className="relative w-full select-none"
@@ -140,7 +148,10 @@ export function LineChart({
               {formatX(points[last].x)}
             </text>
           )}
-          {points.length > 1 && <path d={geo.area} fill={`url(#${gradient})`} />}
+          {points.length > 1 && !dots.length && <path d={geo.area} fill={`url(#${gradient})`} />}
+          {geo.dotPts.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r={2.5} fill="var(--muted-foreground)" opacity={0.45} />
+          ))}
           <path
             d={geo.line}
             fill="none"
@@ -186,8 +197,8 @@ export function LineChart({
         <div
           className="bg-card border-border pointer-events-none absolute top-0 z-10 rounded-lg border px-2.5 py-1.5 text-xs shadow-md"
           style={{
-            left: Math.min(Math.max(geo.pts[shown][0] - 60, 0), width - 120),
-            width: 120,
+            left: Math.min(Math.max(geo.pts[shown][0] - 75, 0), width - 150),
+            width: 150,
           }}
         >
           <div className="text-foreground text-sm font-semibold tabular-nums">
@@ -195,10 +206,34 @@ export function LineChart({
           </div>
           <div className="text-muted-foreground flex items-center gap-1.5">
             <span className="inline-block h-0.5 w-3 rounded" style={{ background: color }} />
-            {points[shown].label ?? formatX(points[shown].x)}
+            {legend ? legend.line : (points[shown].label ?? formatX(points[shown].x))}
           </div>
+          {legend && rawAt(points[shown].x) && (
+            <div className="text-muted-foreground flex items-center gap-1.5">
+              <span className="bg-muted-foreground inline-block size-1.5 rounded-full opacity-60" />
+              {legend.dots} {formatY(rawAt(points[shown].x)!.y)}
+            </div>
+          )}
+          {legend && <div className="text-muted-foreground">{formatX(points[shown].x)}</div>}
         </div>
       )}
+    </div>
+  );
+
+  if (!legend) return chart;
+  return (
+    <div>
+      <div className="text-muted-foreground mb-2 flex gap-4 text-xs">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-0.5 w-3 rounded" style={{ background: color }} />
+          {legend.line}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-muted-foreground inline-block size-1.5 rounded-full opacity-60" />
+          {legend.dots}
+        </span>
+      </div>
+      {chart}
     </div>
   );
 }
