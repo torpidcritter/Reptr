@@ -17,6 +17,19 @@
   --danger: #dc2626;
   --ring: #16a34a;
   --radius: 14px;
+
+  /* Charts: categorical slots in fixed order, a one-hue ramp for magnitude, recessive chrome. */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-grid: #eceef2;
+  --chart-axis: #c9ced6;
+  --heat-0: #eceef2;
+  --heat-1: #cde2fb;
+  --heat-2: #9ec5f4;
+  --heat-3: #5598e7;
+  --heat-4: #2a78d6;
+  --heat-5: #184f95;
 }
 
 .dark {
@@ -32,6 +45,18 @@
   --accent-soft: #10291a;
   --danger: #f87171;
   --ring: #22c55e;
+
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-grid: #22262b;
+  --chart-axis: #383d44;
+  --heat-0: #1c1f23;
+  --heat-1: #104281;
+  --heat-2: #1c5cab;
+  --heat-3: #2a78d6;
+  --heat-4: #5598e7;
+  --heat-5: #9ec5f4;
 }
 
 @theme inline {
