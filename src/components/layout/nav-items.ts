@@ -9,6 +9,12 @@ export const navItems = [
   { href: "/profile", label: "Profile", icon: User },
 ] as const;
 
+/** Sub-sections that live under a nav item, e.g. the exercise library under Train. */
+const sections: Record<string, string[]> = { "/train": ["/exercises", "/routines"] };
+
 export function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  if (href === "/") return pathname === "/";
+  return [href, ...(sections[href] ?? [])].some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
 }
