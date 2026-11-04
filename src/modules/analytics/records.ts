@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { exercises, personalRecords, workoutExercises, workoutSets } from "@/db/schema";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { exercises, personalRecords, workoutExercises, workouts, workoutSets } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { type CalcSet, findRecords, type RecordType } from "./calc";
+import type { Session } from "./progression";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -107,4 +108,53 @@ export async function recentRecords(db: Database, userId: string, limit = 10) {
     .where(eq(personalRecords.userId, userId))
     .orderBy(desc(personalRecords.achievedAt))
     .limit(limit);
+}
+
+/** Completed sessions of one exercise, oldest first (the most recent `limit`). */
+export async function exerciseSessions(
+  db: Database,
+  userId: string,
+  exerciseId: string,
+  limit = 40,
+): Promise<Session[]> {
+  const recent = db
+    .select({ id: workouts.id, finishedAt: workouts.finishedAt })
+    .from(workouts)
+    .where(
+      and(
+        eq(workouts.userId, userId),
+        eq(workouts.status, "completed"),
+        sql`exists (select 1 from ${workoutExercises} we where we.workout_id = ${workouts.id} and we.exercise_id = ${exerciseId})`,
+      ),
+    )
+    .orderBy(desc(workouts.finishedAt))
+    .limit(limit)
+    .as("recent");
+
+  const rows = await db
+    .select({
+      workoutId: recent.id,
+      finishedAt: recent.finishedAt,
+      type: workoutSets.type,
+      weightKg: workoutSets.weightKg,
+      reps: workoutSets.reps,
+      durationSeconds: workoutSets.durationSeconds,
+      distanceMeters: workoutSets.distanceMeters,
+    })
+    .from(recent)
+    .innerJoin(workoutExercises, eq(workoutExercises.workoutId, recent.id))
+    .innerJoin(workoutSets, eq(workoutSets.workoutExerciseId, workoutExercises.id))
+    .where(eq(workoutExercises.exerciseId, exerciseId))
+    .orderBy(asc(recent.finishedAt), asc(workoutExercises.position), asc(workoutSets.setNumber));
+
+  const out: Session[] = [];
+  for (const { workoutId, finishedAt, ...set } of rows) {
+    let s = out[out.length - 1];
+    if (!s || s.workoutId !== workoutId) {
+      s = { workoutId, date: finishedAt!.toISOString(), sets: [] };
+      out.push(s);
+    }
+    s.sets.push(set);
+  }
+  return out;
 }
