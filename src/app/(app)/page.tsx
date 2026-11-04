@@ -26,7 +26,7 @@ export default function Home() {
             <p className="mt-0.5 text-lg font-semibold">No routine planned yet</p>
           </div>
         </div>
-        <Link href="/train" className={buttonVariants({ size: "lg" })}>
+        <Link href="/workout" className={buttonVariants({ size: "lg" })}>
           <Play /> Start workout
         </Link>
       </Card>

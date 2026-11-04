@@ -10,7 +10,9 @@ export const navItems = [
 ] as const;
 
 /** Sub-sections that live under a nav item, e.g. the exercise library under Train. */
-const sections: Record<string, string[]> = { "/train": ["/exercises", "/routines"] };
+const sections: Record<string, string[]> = {
+  "/train": ["/exercises", "/routines", "/workout", "/history"],
+};
 
 export function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";

@@ -53,6 +53,7 @@ export async function listExercises(db: Database, userId: string, filters: Exerc
       id: exercises.id,
       name: exercises.name,
       category: exercises.category,
+      measurement: exercises.measurement,
       isCustom: sql<boolean>`${exercises.ownerId} is not null`,
       equipment: equipment.name,
       primaryMuscles: sql<string[]>`coalesce((
