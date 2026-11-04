@@ -37,6 +37,15 @@ describe.skipIf(!url)("database schema and row-level security", () => {
     await sql.end();
   });
 
+  it("creates a profile when someone signs up", async () => {
+    const rows =
+      await sql`select user_id, unit_system, goal, onboarded_at from profiles order by user_id`;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ unit_system: "metric", goal: "all_round", onboarded_at: null });
+    const own = await asUser(alice, (tx) => tx`select user_id from profiles`);
+    expect(own.map((r) => r.user_id)).toEqual([alice]);
+  });
+
   it("enables row-level security on every table", async () => {
     const rows = await sql`
       select relname from pg_class
