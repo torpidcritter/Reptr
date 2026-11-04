@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { exercises, workoutExercises, workouts, workoutSets } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { recordPersonalRecords } from "@/modules/analytics/records";
 import type { ExerciseSnapshot, SetSnapshot, WorkoutSnapshot } from "./snapshot";
 
 export class WorkoutLockedError extends Error {}
@@ -107,6 +108,7 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
       );
       if (sets.length) await tx.insert(workoutSets).values(sets);
     }
+    if (w.status === "completed") await recordPersonalRecords(tx, userId, finishedAt!, kept);
     return { status: w.status };
   });
 }

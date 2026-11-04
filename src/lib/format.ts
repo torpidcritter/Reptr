@@ -20,3 +20,32 @@ export function formatDuration(ms: number) {
 export function formatVolume(kg: number, units: UnitSystem) {
   return `${Math.round(displayWeight(kg, units, 0)).toLocaleString("en")} ${weightUnitLabel(units)}`;
 }
+
+/** A personal record's value in the user's units. */
+export function formatRecord(
+  type:
+    | "heaviest_weight"
+    | "best_e1rm"
+    | "most_reps"
+    | "best_set_volume"
+    | "longest_duration"
+    | "longest_distance",
+  value: number,
+  units: UnitSystem,
+) {
+  switch (type) {
+    case "heaviest_weight":
+    case "best_e1rm":
+      return `${displayWeight(value, units, 1)} ${weightUnitLabel(units)}`;
+    case "best_set_volume":
+      return formatVolume(value, units);
+    case "most_reps":
+      return `${value} reps`;
+    case "longest_duration":
+      return value < 60 ? `${value}s` : formatDuration(value * 1000);
+    case "longest_distance":
+      return units === "metric"
+        ? `${(value / 1000).toFixed(2)} km`
+        : `${(value / 1609.344).toFixed(2)} mi`;
+  }
+}

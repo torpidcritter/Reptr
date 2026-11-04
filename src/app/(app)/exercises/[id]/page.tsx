@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
-import { requireUser } from "@/lib/auth";
+import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
+import { formatDate, formatRecord } from "@/lib/format";
+import { recordLabels } from "@/modules/analytics/calc";
+import { exerciseRecords } from "@/modules/analytics/records";
 import { categories, measurements } from "@/modules/exercises/custom";
 import { getExercise } from "@/modules/exercises/queries";
 
@@ -15,8 +18,14 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const user = await requireUser();
-  const exercise = await getExercise(db, user.id, id);
+  const [exercise, records, profile, tz] = await Promise.all([
+    getExercise(db, user.id, id),
+    exerciseRecords(db, user.id, id),
+    getProfile(user.id),
+    getTimeZone(),
+  ]);
   if (!exercise) notFound();
+  const units = profile?.unitSystem ?? "metric";
 
   const facts = [
     label(categories, exercise.category),
@@ -54,11 +63,28 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
         </Card>
 
         <Card>
-          <CardLabel>Your history</CardLabel>
-          <p className="text-muted-foreground mt-3 text-sm">
-            Past sets, best lifts and progress for this exercise show up here once you log it in a
-            workout.
-          </p>
+          <CardLabel>Personal records</CardLabel>
+          {records.length ? (
+            <dl className="mt-3 flex flex-col gap-2 text-sm">
+              {records.map((r) => (
+                <div key={r.type} className="flex items-baseline justify-between gap-3">
+                  <dt className="text-muted-foreground">{recordLabels[r.type]}</dt>
+                  <dd className="text-right">
+                    <span className="font-semibold tabular-nums">
+                      {formatRecord(r.type, r.value, units)}
+                    </span>
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {formatDate(r.achievedAt, tz, { weekday: undefined, year: "numeric" })}
+                    </span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-muted-foreground mt-3 text-sm">
+              Your best lifts for this exercise show up here once you log it in a workout.
+            </p>
+          )}
           {exercise.formCues && (
             <>
               <CardLabel className="mt-5">Form cues</CardLabel>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Repeat } from "lucide-react";
+import { ArrowLeft, Repeat, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -9,6 +9,8 @@ import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { formatDate, formatDuration, formatVolume } from "@/lib/format";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
+import { recordLabels } from "@/modules/analytics/calc";
+import { recordsForWorkout } from "@/modules/analytics/records";
 import { summarize } from "@/modules/workouts/snapshot";
 import { getWorkout } from "@/modules/workouts/workouts";
 import { PendingWorkout } from "./pending";
@@ -21,7 +23,12 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [user, tz] = await Promise.all([requireUser(), getTimeZone()]);
-  const [w, profile] = await Promise.all([getWorkout(db, user.id, id), getProfile(user.id)]);
+  const [w, profile, prs] = await Promise.all([
+    getWorkout(db, user.id, id),
+    getProfile(user.id),
+    recordsForWorkout(db, user.id, id),
+  ]);
+  const prCount = Object.values(prs).flat().length;
   if (!w || w.status === "active" || w.status === "paused") return <PendingWorkout id={id} />;
   if (w.status === "abandoned") notFound();
 
@@ -64,6 +71,13 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
         </Card>
       </div>
 
+      {prCount > 0 && (
+        <p className="bg-accent/10 text-accent mb-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium">
+          <Trophy className="size-4" /> {prCount} personal {prCount === 1 ? "record" : "records"}{" "}
+          this workout
+        </p>
+      )}
+
       <div className="flex flex-col gap-3">
         {w.exercises.map((e) => (
           <Card key={e.id}>
@@ -72,7 +86,7 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
             </Link>
             <ol className="mt-2 flex flex-col gap-1 text-sm tabular-nums">
               {e.sets.map((s, i) => (
-                <li key={s.id} className="flex gap-3">
+                <li key={s.id} className="flex flex-wrap gap-x-3">
                   <span className="text-muted-foreground w-6">{typeTag[s.type] || i + 1}</span>
                   <span>
                     {[
@@ -92,6 +106,15 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
                       .filter(Boolean)
                       .join(" × ")}
                   </span>
+                  {prs[s.id] && (
+                    <span
+                      className="text-accent inline-flex basis-full items-center gap-1 pl-9 text-xs font-medium"
+                      title={prs[s.id].map((t) => recordLabels[t]).join(", ")}
+                    >
+                      <Trophy className="size-3.5" />
+                      {prs[s.id].map((t) => recordLabels[t]).join(", ")}
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>
