@@ -4,3 +4,4 @@ export * from "./exercises";
 export * from "./training";
 export * from "./body";
 export * from "./nutrition";
+export * from "./recovery";

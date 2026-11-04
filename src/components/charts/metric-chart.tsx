@@ -30,7 +30,7 @@ export function formatMetric(kind: MetricKind, v: number, units: UnitSystem) {
     case "percent":
       return `${round1(v)}%`;
     case "count":
-      return Number.isInteger(v) ? String(v) : v.toFixed(1);
+      return Number.isInteger(v) ? v.toLocaleString("en") : v.toFixed(1);
   }
 }
 
