@@ -54,3 +54,9 @@ function toHeightCm(value: number, system: string) {
   const cm = system === "imperial" ? inToCm(value) : value;
   return Math.round(cm * 10) / 10;
 }
+
+/** Rest time between sets, in seconds, used when a routine doesn't set one. */
+export const restSchema = z.preprocess(
+  (v) => (v === "" || v == null ? 90 : Number(v)),
+  z.number().int().min(0, "Rest can't be negative.").max(1800, "Keep rest under 30 minutes."),
+);
