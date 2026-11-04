@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
 import type { Database } from "@/db/types";
+import { entrySchema, logEntry } from "@/modules/body/body";
 import { emptyWorkout, exerciseFor } from "@/modules/workouts/start";
 import { saveWorkoutSnapshot } from "@/modules/workouts/workouts";
 
@@ -75,7 +76,27 @@ async function main() {
       count++;
     }
   }
-  console.log(`Added ${count} workouts`);
+  // Weigh-ins most mornings, drifting down ~0.3 kg a week with day-to-day noise.
+  let weighIns = 0;
+  for (let d = 70; d >= 0; d--) {
+    if (d % 7 === 3) continue;
+    const day = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+    const noise = Math.sin(d * 1.7) * 0.6 + Math.cos(d * 0.9) * 0.4;
+    const values: Record<string, number> = {
+      weight: Math.round((82 - (70 - d) * 0.043 + noise) * 10) / 10,
+    };
+    if (d % 14 === 0) {
+      values.waist = Math.round((88 - (70 - d) * 0.04) * 10) / 10;
+      values.body_fat = Math.round((20 - (70 - d) * 0.03) * 10) / 10;
+    }
+    await logEntry(
+      db,
+      userId!,
+      entrySchema.parse({ day, values, bodyFatMethod: values.body_fat ? "scale" : null }),
+    );
+    weighIns++;
+  }
+  console.log(`Added ${count} workouts and ${weighIns} weigh-ins`);
   await sql.end();
 }
 

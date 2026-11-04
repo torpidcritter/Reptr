@@ -15,6 +15,13 @@
       "when": 1793814529167,
       "tag": "0001_profile_on_signup",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793817538384,
+      "tag": "0002_photo_storage",
+      "breakpoints": true
     }
   ]
 }
