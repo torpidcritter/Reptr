@@ -6,6 +6,7 @@ import postgres from "postgres";
 import * as schema from "@/db/schema";
 import type { Database } from "@/db/types";
 import { entrySchema, logEntry } from "@/modules/body/body";
+import { checkinSchema, saveCheckin } from "@/modules/recovery/recovery";
 import { emptyWorkout, exerciseFor } from "@/modules/workouts/start";
 import { saveWorkoutSnapshot } from "@/modules/workouts/workouts";
 
@@ -96,7 +97,24 @@ async function main() {
     );
     weighIns++;
   }
-  console.log(`Added ${count} workouts and ${weighIns} weigh-ins`);
+  // Two weeks of recovery check-ins (not today, so the form starts empty).
+  for (let d = 14; d >= 1; d--) {
+    const day = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+    await saveCheckin(
+      db,
+      userId!,
+      checkinSchema.parse({
+        day,
+        sleepHours: Math.round((7.2 + Math.sin(d * 1.3) * 0.9) * 4) / 4,
+        sleepQuality: 3 + Math.round(Math.sin(d) * 1.2),
+        energy: 3 + Math.round(Math.cos(d) * 1.2),
+        soreness: 2 + (d % 3),
+        stress: 2 + (d % 2),
+        steps: Math.round(8500 + Math.sin(d * 0.8) * 3000),
+      }),
+    );
+  }
+  console.log(`Added ${count} workouts, ${weighIns} weigh-ins and 14 check-ins`);
   await sql.end();
 }
 
