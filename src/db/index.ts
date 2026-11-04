@@ -1,12 +1,13 @@
 import "server-only";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import type { Database } from "./types";
 
 // Server-side database client. It connects as the database owner and bypasses
 // row-level security, so every query must filter by the signed-in user's id.
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = Database;
 const globalForDb = globalThis as unknown as { db?: Db };
 
 function createDb(): Db {
@@ -25,3 +26,4 @@ export const db = new Proxy({} as Db, {
 });
 
 export { schema };
+export type { Database };

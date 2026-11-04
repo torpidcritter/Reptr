@@ -7,6 +7,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /** The signed-in user, verified with Supabase Auth. Cached per request. */
 export const getUser = cache(async () => {
+  const devUser = localDevUser();
+  if (devUser) return devUser;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   return data.user;
@@ -26,3 +28,17 @@ export const getProfile = cache(async (userId: string) => {
     .limit(1);
   return profile ?? null;
 });
+
+/**
+ * Local development without Supabase: set REPTR_DEV_USER_ID (and leave the Supabase
+ * variables unset) to act as that user. Ignored outside `next dev`.
+ */
+function localDevUser() {
+  const id = process.env.REPTR_DEV_USER_ID;
+  if (process.env.NODE_ENV !== "development" || !id || process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return null;
+  }
+  return { id, email: "dev@localhost" } as Awaited<
+    ReturnType<Awaited<ReturnType<typeof createSupabaseServerClient>>["auth"]["getUser"]>
+  >["data"]["user"];
+}
