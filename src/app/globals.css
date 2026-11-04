@@ -1,26 +1,63 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic colour tokens. Components use these, never raw colours, so both themes stay in sync. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6f7f9;
+  --foreground: #0e1116;
+  --card: #ffffff;
+  --card-foreground: #0e1116;
+  --muted: #eceef2;
+  --muted-foreground: #5b6472;
+  --border: #e1e4ea;
+  --accent: #16a34a;
+  --accent-foreground: #ffffff;
+  --accent-soft: #dcfce7;
+  --danger: #dc2626;
+  --ring: #16a34a;
+  --radius: 14px;
+}
+
+.dark {
+  --background: #0b0c0e;
+  --foreground: #f2f4f7;
+  --card: #141619;
+  --card-foreground: #f2f4f7;
+  --muted: #1c1f23;
+  --muted-foreground: #9aa3af;
+  --border: #262a30;
+  --accent: #22c55e;
+  --accent-foreground: #04130a;
+  --accent-soft: #10291a;
+  --danger: #f87171;
+  --ring: #22c55e;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-ring: var(--ring);
+  --radius-card: var(--radius);
+  --font-sans: var(--font-inter);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
