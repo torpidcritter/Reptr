@@ -25,8 +25,13 @@ test("a new account goes through onboarding and starts empty", async ({ page, co
   await page.getByRole("button", { name: "Start using Reptr" }).click();
   await page.waitForURL(/\/$/);
 
-  // Their weight is their first weigh-in, and there's no sample training anywhere.
+  // A clean Today with the two ways to begin, no sample training anywhere, and their
+  // weight as the first weigh-in.
+  await expect(page.getByText("Your training journey starts here")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create routine" })).toBeVisible();
+  await page.goto("/physique");
   await expect(page.getByText("70.5 kg").first()).toBeVisible();
+  await expect(page.getByText("Your first weigh-in")).toBeVisible();
   await page.goto("/history");
   await expect(page.getByText("Completed workouts will appear here")).toBeVisible();
 });

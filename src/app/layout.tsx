@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { ConfirmProvider } from "@/components/ui/confirm";
 import { ServiceWorker } from "@/components/layout/service-worker";
 import "./globals.css";
 
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <ConfirmProvider>{children}</ConfirmProvider>
         </ThemeProvider>
         <ServiceWorker />
       </body>

@@ -53,3 +53,15 @@ export function weeklyRate(trend: Reading[], days = 28): number | null {
   });
   return den ? Math.round((num / den) * 7 * 100) / 100 : null;
 }
+
+/**
+ * How much the latest reading differs from the one `days` or more before it. Null when
+ * there's no reading that far back, so a change is never made up from too little data.
+ */
+export function changeOver(readings: Reading[], days: number): number | null {
+  if (readings.length < 2) return null;
+  const last = readings[readings.length - 1];
+  const cutoff = Date.parse(`${last.day}T00:00:00Z`) - days * 86400000;
+  const before = readings.filter((r) => Date.parse(`${r.day}T00:00:00Z`) <= cutoff).at(-1);
+  return before ? Math.round((last.value - before.value) * 100) / 100 : null;
+}
