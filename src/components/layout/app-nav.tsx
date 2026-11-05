@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CircleUser } from "lucide-react";
 import { Suspense } from "react";
 import { cn } from "@/lib/utils";
 import { isActive, navItems } from "./nav-items";
@@ -34,6 +35,19 @@ function SidebarView({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
+      <Link
+        href="/profile"
+        aria-current={pathname.startsWith("/profile") ? "page" : undefined}
+        className={cn(
+          "mb-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+          pathname.startsWith("/profile")
+            ? "bg-accent-soft text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        )}
+      >
+        <CircleUser className="size-5" />
+        Profile and settings
+      </Link>
       <ThemeToggle compact />
     </aside>
   );
@@ -42,7 +56,7 @@ function SidebarView({ pathname }: { pathname: string }) {
 function BottomNavView({ pathname }: { pathname: string }) {
   return (
     <nav className="bg-card/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      <ul className="grid grid-cols-6">
+      <ul className="grid grid-cols-5">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (

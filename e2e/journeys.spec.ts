@@ -83,10 +83,30 @@ test("download your data and see it in account activity", async ({ page }) => {
   await expect(page.getByText("Downloaded your data (JSON)")).toBeVisible();
 });
 
+test("the plan calendar shows a finished workout on its day", async ({ page }) => {
+  await page.goto("/plan");
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Weekly schedule" })).toBeVisible();
+});
+
 test("@phone the bottom bar reaches every section", async ({ page }) => {
   await page.goto("/");
-  for (const name of ["Train", "Insights", "Body", "Coach"]) {
-    await page.getByRole("navigation").last().getByRole("link", { name }).click();
-    await expect(page).not.toHaveURL(/\/$/);
+  const bar = page.getByRole("navigation").last();
+  for (const [name, path] of [
+    ["Train", "/train"],
+    ["Progress", "/progress"],
+    ["Plan", "/plan"],
+    ["Coach", "/coach"],
+  ]) {
+    await bar.getByRole("link", { name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(bar.getByRole("link", { name, exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   }
+  // In dev mode the Next.js tools button covers the Today tab, so check its link instead of clicking.
+  await expect(bar.getByRole("link", { name: "Today", exact: true })).toHaveAttribute("href", "/");
+  await page.getByRole("link", { name: "Profile and settings" }).click();
+  await expect(page).toHaveURL(/\/profile$/);
 });

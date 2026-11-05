@@ -130,6 +130,7 @@ export async function confirmProposalAction(
       revalidatePath("/routines");
       revalidatePath("/programs");
       revalidatePath("/history");
+      revalidatePath("/plan");
       return {
         done: `Saved ${out.routines} routine${out.routines === 1 ? "" : "s"} and started "${out.block.name}".`,
       };
