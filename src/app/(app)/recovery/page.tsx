@@ -8,7 +8,12 @@ import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
-import { loadRatio, readiness } from "@/modules/recovery/readiness";
+import { baselineFrom, loadRatio, readiness } from "@/modules/recovery/readiness";
+import { recoveryMap } from "@/modules/recovery/muscle-map";
+import { insightData } from "@/modules/analytics/insights-queries";
+import { isWorkingSet } from "@/modules/analytics/calc";
+import { muscles as muscleList } from "@/db/seed/muscles";
+import { cn } from "@/lib/utils";
 import { checkinRange, getCheckin, volumeBetween } from "@/modules/recovery/recovery";
 import { FatigueCard } from "@/components/recovery/fatigue-card";
 import { fatigueFor } from "@/modules/coach/fatigue-queries";
@@ -28,18 +33,37 @@ async function Recovery() {
   const now = new Date();
   const today = localDay(now, tz);
   const from = shift(today, -13);
+  const baselineFromDay = shift(today, -28);
   const day = (n: number) => new Date(now.getTime() - n * 86400000);
 
-  const [checkin, history, last7, last28, profile, fatigue] = await Promise.all([
+  const [checkin, month, last7, last28, profile, fatigue, recent] = await Promise.all([
     getCheckin(db, user.id, today),
-    checkinRange(db, user.id, from, today),
+    checkinRange(db, user.id, baselineFromDay, today),
     volumeBetween(db, user.id, day(7), now),
     volumeBetween(db, user.id, day(28), now),
     getProfile(user.id),
     fatigueFor(db, user.id, tz, now),
+    insightData(db, user.id, day(5)),
   ]);
+  const history = month.filter((c) => c.day >= from);
   const ratio = loadRatio(last7, last28);
-  const r = readiness(checkin, ratio);
+  const r = readiness(checkin, ratio, baselineFrom(month.filter((c) => c.day < today)));
+  const muscleOf = new Map<string, typeof recent.links>();
+  for (const l of recent.links)
+    muscleOf.set(l.exerciseId, [...(muscleOf.get(l.exerciseId) ?? []), l]);
+  const map = recoveryMap(
+    recent.sets.filter(isWorkingSet).flatMap((s) =>
+      (muscleOf.get(s.exerciseId) ?? []).map((l) => ({
+        workoutId: s.workoutId,
+        at: s.finishedAt ?? s.startedAt,
+        muscle: l.muscle,
+        role: l.role,
+      })),
+    ),
+    now,
+    checkin?.soreMuscles ?? [],
+  );
+  const muscleName = new Map<string, string>(muscleList.map((m) => [m.slug, m.name]));
   const units = profile?.unitSystem ?? "metric";
   const days = Array.from({ length: 14 }, (_, i) => shift(from, i));
   const byDay = new Map(history.map((h) => [h.day, h]));
@@ -101,6 +125,43 @@ async function Recovery() {
         <FatigueCard f={fatigue} />
 
         <Card>
+          <CardLabel>Muscle recovery</CardLabel>
+          <p className="text-muted-foreground mb-3 text-xs">
+            From your last session for each muscle: about two days to recover, longer for big
+            muscles and long sessions. Muscles you marked sore today show as sore.
+          </p>
+          <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {map.map((m) => (
+              <li
+                key={m.muscle}
+                className={cn(
+                  "rounded-lg border px-2.5 py-1.5 text-sm",
+                  m.status === "ready" && "border-accent/40",
+                  m.status === "recovering" && "border-dashed",
+                  m.status === "sore" && "border-amber-500/60",
+                )}
+              >
+                <span className="block font-medium">{muscleName.get(m.muscle) ?? m.muscle}</span>
+                <span
+                  className={cn(
+                    "text-xs",
+                    m.status === "ready" && "text-accent",
+                    m.status === "recovering" && "text-muted-foreground",
+                    m.status === "sore" && "text-amber-600 dark:text-amber-400",
+                  )}
+                >
+                  {m.status === "ready"
+                    ? "✓ Ready"
+                    : m.status === "sore"
+                      ? "Sore today"
+                      : `About ${m.hoursLeft} h to go`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card>
           <CardLabel>Sleep, last 14 days</CardLabel>
           <p className="text-muted-foreground mb-3 text-xs">
             {avgSleep != null
@@ -157,6 +218,8 @@ async function Recovery() {
                 stress: checkin.stress,
                 steps: checkin.steps,
                 restingHr: checkin.restingHr,
+                hrvMs: checkin.hrvMs,
+                soreMuscles: checkin.soreMuscles,
               }
             }
           />

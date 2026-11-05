@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, testDatabaseUrl } from "@/db/test/test-db";
-import { loadRatio, readiness } from "./readiness";
+import { baselineFrom, loadRatio, readiness } from "./readiness";
 import { checkinRange, checkinSchema, getCheckin, saveCheckin } from "./recovery";
 
 describe("readiness", () => {
@@ -36,6 +36,27 @@ describe("readiness", () => {
   });
 });
 
+describe("readiness against your own baseline", () => {
+  const plain = {
+    sleepHours: null,
+    sleepQuality: null,
+    energy: null,
+    soreness: null,
+    stress: null,
+  };
+  it("reads HRV and resting HR relative to usual", () => {
+    const base = baselineFrom(Array.from({ length: 6 }, () => ({ restingHr: 55, hrvMs: 60 })));
+    expect(base).toEqual({ restingHr: 55, hrvMs: 60 });
+    const good = readiness({ ...plain, hrvMs: 72, restingHr: 52 }, null, base)!;
+    expect(good.score).toBeGreaterThanOrEqual(90);
+    const poor = readiness({ ...plain, hrvMs: 45, restingHr: 62 }, null, base)!;
+    expect(poor.level).toBe("low");
+    expect(poor.factors.map((f) => f.label)).toEqual(["HRV", "Resting heart rate"]);
+    // Without a baseline they're left out.
+    expect(readiness({ ...plain, hrvMs: 45 }, null, baselineFrom([]))).toBeNull();
+  });
+});
+
 describe.skipIf(!testDatabaseUrl)("check-ins", () => {
   let t: Awaited<ReturnType<typeof createTestDatabase>>;
   const alice = randomUUID();
@@ -47,6 +68,26 @@ describe.skipIf(!testDatabaseUrl)("check-ins", () => {
     await t.addUser(bob);
   });
   afterAll(() => t?.close());
+
+  it("stores HRV and sore muscles, and rejects unknown muscles", async () => {
+    await saveCheckin(
+      t.db,
+      bob,
+      checkinSchema.parse({
+        day: "2026-11-02",
+        hrvMs: 64,
+        soreMuscles: ["quads", "quads", "calves"],
+      }),
+    );
+    expect(await getCheckin(t.db, bob, "2026-11-02")).toMatchObject({
+      hrvMs: 64,
+      soreMuscles: ["quads", "calves"],
+    });
+    expect(checkinSchema.safeParse({ day: "2026-11-02", soreMuscles: ["toes"] }).success).toBe(
+      false,
+    );
+    expect(checkinSchema.safeParse({ day: "2026-11-02", hrvMs: 2 }).success).toBe(false);
+  });
 
   it("keeps one check-in per day and per user", async () => {
     await saveCheckin(

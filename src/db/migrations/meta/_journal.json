@@ -85,6 +85,13 @@
       "when": 1793866236353,
       "tag": "0011_coach_memories",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793866664291,
+      "tag": "0012_checkin_hrv_soreness",
+      "breakpoints": true
     }
   ]
 }

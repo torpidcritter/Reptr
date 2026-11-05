@@ -2,6 +2,7 @@ import { and, asc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { dailyCheckins, workoutExercises, workouts, workoutSets } from "@/db/schema";
 import type { Database } from "@/db/types";
+import { muscleSlugs } from "./muscle-map";
 
 const score = z.number().int().min(1).max(5).nullable().default(null);
 
@@ -14,6 +15,12 @@ export const checkinSchema = z.object({
   stress: score,
   steps: z.number().int().min(0).max(200000).nullable().default(null),
   restingHr: z.number().int().min(25).max(200).nullable().default(null),
+  hrvMs: z.number().int().min(5).max(300).nullable().default(null),
+  soreMuscles: z
+    .array(z.enum(muscleSlugs))
+    .max(20)
+    .default([])
+    .transform((m) => [...new Set(m)]),
   notes: z.string().trim().max(1000).nullable().default(null),
 });
 export type CheckinInput = z.infer<typeof checkinSchema>;
