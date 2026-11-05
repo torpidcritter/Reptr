@@ -118,6 +118,14 @@ test("the plan calendar shows a finished workout on its day", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Weekly schedule" })).toBeVisible();
 });
 
+test("progress explains strength and lists the workout just logged", async ({ page }) => {
+  await page.goto("/progress");
+  await expect(page.getByRole("heading", { name: "Recent workouts" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Strength" })).toBeVisible();
+  await page.getByRole("link", { name: /Detailed analysis/ }).click();
+  await expect(page.getByRole("heading", { name: "Detailed analysis" })).toBeVisible();
+});
+
 test("@phone the bottom bar reaches every section", async ({ page }) => {
   await page.goto("/");
   const bar = page.getByRole("navigation").last();
