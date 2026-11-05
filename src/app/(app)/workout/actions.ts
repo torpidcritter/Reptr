@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { getProfile, requireUser } from "@/lib/auth";
+import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
+import { localDay } from "@/modules/analytics/insights";
+import { applyDeload, blockWeek } from "@/modules/programs/block";
+import { activeProgram } from "@/modules/programs/programs";
 import { getRoutine } from "@/modules/routines/routines";
 import { workoutSnapshotSchema, type WorkoutSnapshot } from "@/modules/workouts/snapshot";
 import { workoutFromPast, workoutFromRoutine } from "@/modules/workouts/start";
@@ -34,12 +37,19 @@ export async function startFromRoutineAction(routineId: string) {
   const user = await requireUser();
   const routine = await getRoutine(db, user.id, routineId);
   if (!routine) return null;
-  const previous = await getPreviousPerformance(
-    db,
-    user.id,
-    routine.items.map((i) => i.exerciseId),
-  );
-  return workoutFromRoutine(routine, previous);
+  const [previous, program, tz] = await Promise.all([
+    getPreviousPerformance(
+      db,
+      user.id,
+      routine.items.map((i) => i.exerciseId),
+    ),
+    activeProgram(db, user.id),
+    getTimeZone(),
+  ]);
+  const workout = workoutFromRoutine(routine, previous);
+  // In a deload week of the current block, start lighter.
+  const week = program && blockWeek(program, localDay(new Date(), tz));
+  return week?.status === "active" && week.kind === "deload" ? applyDeload(workout) : workout;
 }
 
 export async function getActiveWorkoutAction() {

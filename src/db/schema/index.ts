@@ -6,3 +6,4 @@ export * from "./body";
 export * from "./nutrition";
 export * from "./recovery";
 export * from "./goals";
+export * from "./programs";
