@@ -52,12 +52,16 @@ async function PlanView({ searchParams }: Pick<PageProps<"/plan">, "searchParams
     byDay.set(d, [...(byDay.get(d) ?? []), w]);
   }
   const planned = plannedByWeekday(routines);
-  const hasPlan = planned.some((p) => p.length > 0);
+  const hasRoutinePlan = planned.some((p) => p.length > 0);
+  // Without scheduled routines, fall back to the training days picked in settings (as Today does).
+  const settingsDays = hasRoutinePlan ? [] : (profile?.trainingDays ?? []);
+  const isTrainingDay = (wd: number) => planned[wd].length > 0 || settingsDays.includes(wd);
+  const hasPlan = hasRoutinePlan || settingsDays.length > 0;
 
   // This week: planned days so far and how many of them had a workout.
   const week = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const doneThisWeek = week.filter((d) => byDay.has(d)).length;
-  const plannedThisWeek = week.filter((d) => planned[weekdayOf(d)].length > 0).length;
+  const plannedThisWeek = week.filter((d) => isTrainingDay(weekdayOf(d))).length;
 
   const label = new Intl.DateTimeFormat("en-GB", {
     month: "long",
@@ -117,7 +121,7 @@ async function PlanView({ searchParams }: Pick<PageProps<"/plan">, "searchParams
           ))}
           {grid.flat().map((d) => {
             const trained = byDay.has(d.date);
-            const isPlanned = !trained && d.date >= today && planned[weekdayOf(d.date)].length > 0;
+            const isPlanned = !trained && d.date >= today && isTrainingDay(weekdayOf(d.date));
             const isSelected = d.date === selected;
             return (
               <Link
@@ -199,6 +203,18 @@ async function PlanView({ searchParams }: Pick<PageProps<"/plan">, "searchParams
                 )}
               </Card>
             ))
+          ) : selected >= today && settingsDays.includes(weekdayOf(selected)) ? (
+            <Card className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-muted-foreground text-xs">Planned</p>
+                <p className="font-medium">Training day</p>
+              </div>
+              {selected === today && (
+                <Link href="/workout" className={buttonVariants({ size: "sm" })}>
+                  <Play /> Start
+                </Link>
+              )}
+            </Card>
           ) : (
             <p className="text-muted-foreground text-sm">
               {selected >= today ? "Nothing planned." : "No workout this day."}
@@ -215,7 +231,7 @@ async function PlanView({ searchParams }: Pick<PageProps<"/plan">, "searchParams
             Edit routines
           </Link>
         </div>
-        {hasPlan ? (
+        {hasRoutinePlan ? (
           <ul className="divide-y rounded-xl border">
             {planned.map((rs, i) => (
               <li key={i} className="flex items-center gap-4 px-4 py-2.5 text-sm">
@@ -228,6 +244,8 @@ async function PlanView({ searchParams }: Pick<PageProps<"/plan">, "searchParams
           </ul>
         ) : (
           <p className="text-muted-foreground text-sm">
+            {settingsDays.length > 0 &&
+              `You train on ${settingsDays.map((d) => weekdayNames[d]).join(", ")}. `}
             Pick training days on a routine and they show up here and on the calendar.
           </p>
         )}

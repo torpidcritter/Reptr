@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { e2ePort } from "./env";
 
 // Building a routine with the filtered exercise picker, starting it, and settings that stick.
 
@@ -62,4 +63,47 @@ test("settings keep training days and turn on optional modules", async ({ page }
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Log food" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Check in" })).toHaveCount(0);
+});
+
+test("sets logged offline stay on the device and save once back online", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/workout");
+  await page.getByRole("button", { name: "Start empty workout" }).click();
+  await page.getByRole("button", { name: "Add exercise" }).click();
+  await page.getByPlaceholder("Search exercises").fill("barbell row");
+  await page
+    .getByRole("button", { name: /^Barbell Row/ })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Done" }).first().click();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+
+  await context.setOffline(true);
+  await page.getByLabel("Weight").first().fill("72.5");
+  await page.getByLabel("Reps").first().fill("9");
+  await page.getByRole("button", { name: "Complete set 1" }).click();
+  await expect(page.getByText("Offline, saved on this device")).toBeVisible();
+
+  await context.setOffline(false);
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible({ timeout: 30_000 });
+
+  // Still there after a reload.
+  await page.reload();
+  await expect(page.getByLabel("Weight").first()).toHaveValue("72.5");
+  await expect(page.getByLabel("Reps").first()).toHaveValue("9");
+
+  await page.getByRole("button", { name: "Discard workout" }).click();
+  await page
+    .getByRole("dialog", { name: "Discard this workout?" })
+    .getByRole("button", { name: "Discard" })
+    .click();
+});
+
+test("buttons work when Reptr is opened at 127.0.0.1", async ({ page }) => {
+  // Dev mode used to block scripts for any origin except localhost, so nothing responded.
+  await page.goto(`http://127.0.0.1:${e2ePort}/routines/new`);
+  await page.getByRole("button", { name: "Add exercises" }).click();
+  await expect(page.getByPlaceholder("Search exercises")).toBeVisible();
 });

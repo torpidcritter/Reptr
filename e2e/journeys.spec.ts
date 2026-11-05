@@ -119,6 +119,16 @@ test("the plan calendar shows a finished workout on its day", async ({ page }) =
   await page.goto("/plan");
   await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Weekly schedule" })).toBeVisible();
+
+  // The workout logged earlier fills its day; opening that day lists it and links to it.
+  await page
+    .getByRole("link", { name: /, trained$/ })
+    .first()
+    .click();
+  const day = page.getByRole("region", { name: /Today|day/ }).filter({ hasText: "sets" });
+  await expect(day.getByText("Barbell Bench Press")).toBeVisible();
+  await day.getByRole("link").first().click();
+  await page.waitForURL(/\/history\/[0-9a-f-]{36}/);
 });
 
 test("progress explains strength and lists the workout just logged", async ({ page }) => {
