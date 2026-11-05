@@ -30,10 +30,74 @@ import {
   trainingLoad,
 } from "@/modules/analytics/landmarks";
 import { strengthRatios } from "@/modules/analytics/ratios";
+import {
+  factorEffects,
+  minSessions,
+  performanceByWorkout,
+  type PerfSet,
+} from "@/modules/analytics/correlations";
+import { checkinRange } from "@/modules/recovery/recovery";
+import { dailyTotals } from "@/modules/nutrition/nutrition";
+import { addDays } from "@/modules/history/schedule";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
 import { bodyweightNow } from "@/modules/goals/goals";
 
 export const metadata: Metadata = { title: "Insights" };
+
+type CheckinRow = Awaited<ReturnType<typeof checkinRange>>[number];
+type FoodRow = Awaited<ReturnType<typeof dailyTotals>>[number];
+
+/** Daily factors set against how strong each session was. */
+function whatHelps(sets: PerfSet[], checkins: CheckinRow[], food: FoodRow[]) {
+  const c = new Map(checkins.map((x) => [x.day, x]));
+  const f = new Map(food.map((x) => [x.day, x]));
+  const dayBefore = (day: string) => f.get(addDays(day, -1));
+  const score = (n: number | null | undefined) => n ?? null;
+  return factorEffects(performanceByWorkout(sets), [
+    {
+      key: "sleep",
+      label: "Sleep",
+      high: (v) => `${v} h sleep or more`,
+      valueFor: (d) => score(c.get(d)?.sleepHours),
+    },
+    {
+      key: "quality",
+      label: "Sleep quality",
+      high: (v) => `sleep quality ${v}/5 or better`,
+      valueFor: (d) => score(c.get(d)?.sleepQuality),
+    },
+    {
+      key: "energy",
+      label: "Energy",
+      high: (v) => `energy ${v}/5 or higher`,
+      valueFor: (d) => score(c.get(d)?.energy),
+    },
+    {
+      key: "soreness",
+      label: "Soreness",
+      high: (v) => `soreness ${v}/5 or higher`,
+      valueFor: (d) => score(c.get(d)?.soreness),
+    },
+    {
+      key: "stress",
+      label: "Stress",
+      high: (v) => `stress ${v}/5 or higher`,
+      valueFor: (d) => score(c.get(d)?.stress),
+    },
+    {
+      key: "calories",
+      label: "Calories the day before",
+      high: (v) => `${v.toLocaleString("en")} kcal or more the day before`,
+      valueFor: (d) => score(dayBefore(d)?.calories),
+    },
+    {
+      key: "protein",
+      label: "Protein the day before",
+      high: (v) => `${Math.round(v)} g protein or more the day before`,
+      valueFor: (d) => score(dayBefore(d)?.proteinG),
+    },
+  ]);
+}
 
 const muscleName = new Map<string, string>(muscleList.map((m) => [m.slug, m.name]));
 
@@ -88,21 +152,32 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
   // Twice the range (for the comparison) plus a day of slack for time zones.
   const from = new Date(`${weeks[0]}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - 7 * weeks.length - 1);
-  const [{ sets, links }, profile, liftBests, body] = await Promise.all([
-    insightData(db, user.id, from),
+  // Correlations look at the last six months whatever the range.
+  const today = localDay(new Date(), tz);
+  const halfYear = new Date(Date.parse(`${today}T00:00:00Z`) - 183 * 86400000);
+  const since = from < halfYear ? from : halfYear;
+  const sinceDay = since.toISOString().slice(0, 10);
+  const [{ sets, links }, profile, liftBests, body, checkins, food] = await Promise.all([
+    insightData(db, user.id, since),
     getProfile(user.id),
     mainLiftBests(db, user.id),
     bodyweightNow(db, user.id),
+    checkinRange(db, user.id, sinceDay, today),
+    dailyTotals(db, user.id, sinceDay, today),
   ]);
   const ratios = strengthRatios(liftBests, body.current);
   const units = profile?.unitSystem ?? "metric";
   const i = buildInsights(sets, links, weeks, tz);
-  const today = localDay(new Date(), tz);
   const load = trainingLoad(
     last28Days(
       sets.filter((s) => s.type !== "warmup").map((s) => localDay(s.startedAt, tz)),
       today,
     ),
+  );
+  const effects = whatHelps(
+    sets.map((x) => ({ ...x, day: localDay(x.startedAt, tz) })),
+    checkins,
+    food,
   );
   const neglected = neglectedMuscles(new Map(i.muscleAvg.map((m) => [m.muscle, m.avg])));
 
@@ -316,6 +391,56 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
           </div>
         </>
       )}
+
+      <h2 className="mt-8 mb-1 text-lg font-semibold">What goes with your better sessions</h2>
+      <p className="text-muted-foreground mb-3 text-sm">
+        Each session is scored by how its estimated 1RMs compare with your previous sessions of the
+        same exercises, then set against your check-ins and food log over the last 6 months. These
+        are patterns in your data, not proof of cause.
+      </p>
+      <Card className="mb-4">
+        {effects.some((e) => "r" in e) ? (
+          <>
+            <ul className="flex flex-col gap-3 text-sm">
+              {effects.flatMap((e) =>
+                "r" in e && e.r != null && e.strength !== "no clear"
+                  ? [
+                      <li key={e.key}>
+                        <p>
+                          On days with {e.highLabel}, sessions were{" "}
+                          <span className="font-semibold">
+                            {Math.abs(e.gap!).toFixed(1)}% {e.gap! >= 0 ? "stronger" : "weaker"}
+                          </span>{" "}
+                          than otherwise.
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          A {e.strength} link (r {e.r.toFixed(2)}, {e.n} sessions)
+                        </p>
+                      </li>,
+                    ]
+                  : [],
+              )}
+            </ul>
+            {(() => {
+              const unclear = effects.filter((e) => "strength" in e && e.strength === "no clear");
+              return unclear.length ? (
+                <p className="text-muted-foreground mt-3 text-xs">
+                  No clear link yet: {unclear.map((e) => e.label.toLowerCase()).join(", ")}.
+                </p>
+              ) : null;
+            })()}
+          </>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Not enough paired data yet. Log daily check-ins on the{" "}
+            <Link href="/recovery" className="text-accent hover:underline">
+              Recovery
+            </Link>{" "}
+            page (sleep, energy, soreness) or your food; once about {minSessions} workouts line up
+            with them, you&apos;ll see what goes with your stronger sessions.
+          </p>
+        )}
+      </Card>
 
       {i.topLifts.length > 0 && (
         <>
