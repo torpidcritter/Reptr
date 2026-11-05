@@ -5,12 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { saveCheckinAction } from "./actions";
+import { muscles as muscleList } from "@/db/seed/muscles";
+import { mapMuscles } from "@/modules/recovery/muscle-map";
+
+const muscleName = new Map<string, string>(muscleList.map((m) => [m.slug, m.name]));
 
 type Scores = "sleepQuality" | "energy" | "soreness" | "stress";
 export type CheckinValues = {
   sleepHours: number | null;
   steps: number | null;
   restingHr: number | null;
+  hrvMs: number | null;
+  soreMuscles: string[];
 } & Record<Scores, number | null>;
 
 const scales: { key: Scores; label: string; low: string; high: string }[] = [
@@ -31,6 +37,8 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
   const [sleep, setSleep] = useState(initial?.sleepHours?.toString() ?? "");
   const [steps, setSteps] = useState(initial?.steps?.toString() ?? "");
   const [hr, setHr] = useState(initial?.restingHr?.toString() ?? "");
+  const [hrv, setHrv] = useState(initial?.hrvMs?.toString() ?? "");
+  const [sore, setSore] = useState<string[]>(initial?.soreMuscles ?? []);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -49,6 +57,8 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
         sleepHours: n(sleep),
         steps: n(steps, true),
         restingHr: n(hr, true),
+        hrvMs: n(hrv, true),
+        soreMuscles: sore,
       });
       setMsg(res.error ?? "Saved.");
     });
@@ -56,7 +66,7 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
 
   return (
     <form onSubmit={save} className="flex flex-col gap-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
         <label className="flex flex-col gap-1">
           <span className="text-muted-foreground text-xs">Sleep (hours)</span>
           <Input
@@ -91,6 +101,17 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
             onChange={(e) => setHr(e.target.value)}
           />
         </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-muted-foreground text-xs">HRV (ms)</span>
+          <Input
+            type="number"
+            inputMode="numeric"
+            min="5"
+            max="300"
+            value={hrv}
+            onChange={(e) => setHrv(e.target.value)}
+          />
+        </label>
       </div>
 
       {scales.map((s) => (
@@ -122,6 +143,31 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
           </div>
         </fieldset>
       ))}
+
+      <fieldset>
+        <legend className="mb-1.5 text-sm font-medium">Sore muscles</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {mapMuscles.map((m) => {
+            const on = sore.includes(m);
+            return (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setSore((x) => (on ? x.filter((y) => y !== m) : [...x, m]))}
+                className={cn(
+                  "rounded-full border px-2.5 py-1 text-xs font-medium",
+                  on
+                    ? "border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                    : "bg-muted hover:border-accent/50 border-transparent",
+                )}
+              >
+                {muscleName.get(m) ?? m}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>

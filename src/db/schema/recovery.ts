@@ -28,6 +28,13 @@ export const dailyCheckins = pgTable(
     stress: smallint("stress"),
     steps: integer("steps"),
     restingHr: smallint("resting_hr"),
+    /** Heart-rate variability (RMSSD) in milliseconds, as a watch or app reports it. */
+    hrvMs: smallint("hrv_ms"),
+    /** Muscle slugs that feel sore today. */
+    soreMuscles: text("sore_muscles")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     notes: text("notes"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -47,6 +54,7 @@ export const dailyCheckins = pgTable(
       "daily_checkins_hr_range",
       sql`${t.restingHr} is null or ${t.restingHr} between 25 and 200`,
     ),
+    check("daily_checkins_hrv_range", sql`${t.hrvMs} is null or ${t.hrvMs} between 5 and 300`),
     ownerPolicy("daily_checkins", t.userId),
   ],
 );

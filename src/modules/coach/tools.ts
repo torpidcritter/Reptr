@@ -13,7 +13,7 @@ import { dailyReadings, trendLine, weeklyRate } from "@/modules/body/trend";
 import { listExercises } from "@/modules/exercises/queries";
 import { listWorkoutHistory } from "@/modules/history/history";
 import { dailyTotals, getTargets } from "@/modules/nutrition/nutrition";
-import { loadRatio, readiness } from "@/modules/recovery/readiness";
+import { baselineFrom, loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, volumeBetween } from "@/modules/recovery/recovery";
 import { listRoutines } from "@/modules/routines/routines";
 import { fatigueFor } from "./fatigue-queries";
@@ -246,20 +246,22 @@ export const tools: Record<string, Tool> = {
 
   recovery_summary: tool({
     description:
-      "Recent daily check-ins (sleep, energy, soreness, stress, steps), today's readiness score and training load ratio.",
+      "Recent daily check-ins (sleep, energy, soreness, sore muscles, stress, steps, resting HR, HRV), today's readiness score (HRV and resting HR compared with their 4-week baseline) and training load ratio.",
     parameters: z.object({ days: z.number().int().min(1).max(30).default(7) }),
     run: async (ctx, { days }) => {
       const now = ctx.now;
       const ago = (n: number) => new Date(now.getTime() - n * 86400000);
-      const [checkins, last7, last28] = await Promise.all([
-        checkinRange(ctx.db, ctx.userId, daysAgo(ctx, days - 1), daysAgo(ctx, 0)),
+      const [all, last7, last28] = await Promise.all([
+        checkinRange(ctx.db, ctx.userId, daysAgo(ctx, Math.max(days, 28) - 1), daysAgo(ctx, 0)),
         volumeBetween(ctx.db, ctx.userId, ago(7), now),
         volumeBetween(ctx.db, ctx.userId, ago(28), now),
       ]);
       const ratio = loadRatio(last7, last28);
-      const today = checkins.find((c) => c.day === daysAgo(ctx, 0)) ?? null;
+      const todayKey = daysAgo(ctx, 0);
+      const today = all.find((c) => c.day === todayKey) ?? null;
+      const checkins = all.filter((c) => c.day >= daysAgo(ctx, days - 1));
       return {
-        readinessToday: readiness(today, ratio),
+        readinessToday: readiness(today, ratio, baselineFrom(all.filter((c) => c.day < todayKey))),
         loadRatio: ratio,
         checkins: checkins.map((c) => ({
           day: c.day,
@@ -269,6 +271,9 @@ export const tools: Record<string, Tool> = {
           soreness: c.soreness,
           stress: c.stress,
           steps: c.steps,
+          restingHr: c.restingHr,
+          hrvMs: c.hrvMs,
+          soreMuscles: c.soreMuscles,
         })),
       };
     },

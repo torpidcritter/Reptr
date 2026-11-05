@@ -8,7 +8,11 @@ import { checkinSchema, saveCheckin } from "@/modules/recovery/recovery";
 export async function saveCheckinAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
   const parsed = checkinSchema.safeParse(payload);
-  if (!parsed.success) return { error: "Check the numbers: sleep 0–24 h, steps up to 200,000." };
+  if (!parsed.success)
+    return {
+      error:
+        "Check the numbers: sleep 0–24 h, steps up to 200,000, resting HR 25–200, HRV 5–300 ms.",
+    };
   await saveCheckin(db, user.id, parsed.data);
   revalidatePath("/recovery");
   revalidatePath("/");
