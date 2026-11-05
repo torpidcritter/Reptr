@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -28,6 +29,13 @@ export const routines = pgTable(
     userId: userId(),
     name: text("name").notNull(),
     notes: text("notes"),
+    /** Planned weekdays, Monday = 0 … Sunday = 6. Empty means not scheduled. */
+    scheduleDays: smallint("schedule_days")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
+    /** When the planned days last changed, so adherence isn't judged before the plan existed. */
+    scheduleSetAt: timestamp("schedule_set_at", { withTimezone: true }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -35,6 +43,10 @@ export const routines = pgTable(
   (t) => [
     unique("routines_id_user_key").on(t.id, t.userId),
     index("routines_user_idx").on(t.userId),
+    check(
+      "routines_schedule_days_valid",
+      sql`${t.scheduleDays} <@ array[0, 1, 2, 3, 4, 5, 6]::smallint[]`,
+    ),
     ownerPolicy("routines", t.userId),
   ],
 );

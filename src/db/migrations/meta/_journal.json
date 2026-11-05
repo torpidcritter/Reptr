@@ -57,6 +57,13 @@
       "when": 1793863613715,
       "tag": "0007_planned_sets",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793863954282,
+      "tag": "0008_routine_schedule",
+      "breakpoints": true
     }
   ]
 }

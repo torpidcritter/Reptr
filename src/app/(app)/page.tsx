@@ -17,6 +17,7 @@ import { recentRecords } from "@/modules/analytics/records";
 import { metricSeries } from "@/modules/body/body";
 import { dailyReadings, trendLine, weeklyRate } from "@/modules/body/trend";
 import { nextRoutine, weekStreak } from "@/modules/dashboard/dashboard";
+import { weekdayOf } from "@/modules/history/schedule";
 
 function Stat({
   label,
@@ -56,7 +57,7 @@ async function Dashboard() {
 
   const [profile, next, data, weights, prs] = await Promise.all([
     getProfile(user.id),
-    nextRoutine(db, user.id),
+    nextRoutine(db, user.id, weekdayOf(localDay(new Date(), tz))),
     insightData(db, user.id, from),
     metricSeries(db, user.id, "weight", since),
     recentRecords(db, user.id, 5),
@@ -79,7 +80,9 @@ async function Dashboard() {
             <Dumbbell className="text-accent size-6" />
           </div>
           <div>
-            <CardLabel>{next ? "Up next" : "Today's workout"}</CardLabel>
+            <CardLabel>
+              {next?.plannedToday ? "Planned today" : next ? "Up next" : "Today's workout"}
+            </CardLabel>
             <p className="mt-0.5 text-lg font-semibold">{next ? next.name : "No routines yet"}</p>
             <p className="text-muted-foreground text-sm">
               {next
@@ -90,15 +93,22 @@ async function Dashboard() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {next && (
-            <Link href="/workout" className={buttonVariants({ variant: "outline", size: "lg" })}>
+            <Link
+              href="/workout"
+              className={buttonVariants({
+                variant: "outline",
+                size: "lg",
+                className: "flex-1 md:flex-none",
+              })}
+            >
               Pick another
             </Link>
           )}
           <Link
             href={next ? `/workout?routine=${next.id}` : "/workout"}
-            className={buttonVariants({ size: "lg" })}
+            className={buttonVariants({ size: "lg", className: "flex-1 md:flex-none" })}
           >
             <Play /> Start {next ? next.name : "workout"}
           </Link>

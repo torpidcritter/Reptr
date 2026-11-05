@@ -8,7 +8,7 @@ export default function NewRoutinePage() {
   return (
     <div className="max-w-2xl">
       <PageHeader title="New routine" subtitle="A reusable plan for a training day" />
-      <RoutineBuilder initial={{ id: null, name: "", notes: null, items: [] }} />
+      <RoutineBuilder initial={{ id: null, name: "", notes: null, scheduleDays: [], items: [] }} />
     </div>
   );
 }

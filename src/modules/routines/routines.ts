@@ -32,6 +32,12 @@ export const routineSchema = z.object({
     .min(1, "Give the routine a name.")
     .max(60, "Keep it under 60 characters."),
   notes: z.string().trim().max(1000).nullish(),
+  /** Weekdays it's planned for, Monday = 0 … Sunday = 6. */
+  scheduleDays: z
+    .array(z.number().int().min(0).max(6))
+    .max(7)
+    .default([])
+    .transform((d) => [...new Set(d)].sort()),
   items: z.array(routineItemSchema).min(1, "Add at least one exercise.").max(40),
 });
 
@@ -44,6 +50,8 @@ export async function listRoutines(db: Database, userId: string) {
     .select({
       id: routines.id,
       name: routines.name,
+      scheduleDays: routines.scheduleDays,
+      scheduleSetAt: routines.scheduleSetAt,
       updatedAt: routines.updatedAt,
       exerciseCount: sql<number>`(select count(*)::int from ${routineExercises} re where re.routine_id = "routines"."id")`,
       exerciseNames: sql<string[]>`coalesce((
@@ -59,7 +67,12 @@ export async function listRoutines(db: Database, userId: string) {
 
 export async function getRoutine(db: Database, userId: string, id: string) {
   const [routine] = await db
-    .select({ id: routines.id, name: routines.name, notes: routines.notes })
+    .select({
+      id: routines.id,
+      name: routines.name,
+      notes: routines.notes,
+      scheduleDays: routines.scheduleDays,
+    })
     .from(routines)
     .where(and(eq(routines.id, id), eq(routines.userId, userId), isNull(routines.archivedAt)));
   if (!routine) return null;
@@ -106,7 +119,12 @@ export async function saveRoutine(
     if (id) {
       const updated = await tx
         .update(routines)
-        .set({ name: input.name, notes: input.notes ?? null })
+        .set({
+          name: input.name,
+          notes: input.notes ?? null,
+          scheduleDays: input.scheduleDays,
+          scheduleSetAt: sql`case when ${routines.scheduleDays} is distinct from ${sql.param(input.scheduleDays)}::smallint[] then now() else ${routines.scheduleSetAt} end`,
+        })
         .where(and(eq(routines.id, id), eq(routines.userId, userId), isNull(routines.archivedAt)))
         .returning({ id: routines.id });
       if (updated.length === 0) throw new RoutineNotFoundError("Routine not found");
@@ -114,7 +132,13 @@ export async function saveRoutine(
     } else {
       [{ id }] = await tx
         .insert(routines)
-        .values({ userId, name: input.name, notes: input.notes ?? null })
+        .values({
+          userId,
+          name: input.name,
+          notes: input.notes ?? null,
+          scheduleDays: input.scheduleDays,
+          scheduleSetAt: input.scheduleDays.length ? new Date() : null,
+        })
         .returning({ id: routines.id });
     }
 
@@ -150,6 +174,7 @@ export async function duplicateRoutine(db: Database, userId: string, id: string)
   return saveRoutine(db, userId, {
     name: `${routine.name} (copy)`.slice(0, 60),
     notes: routine.notes,
+    scheduleDays: [], // a copy on the same days would double-book them
     items: routine.items,
   });
 }

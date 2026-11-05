@@ -3,15 +3,23 @@ import { routines, workouts } from "@/db/schema";
 import type { Database } from "@/db/types";
 
 /** The routine due next: never done first, then the one done longest ago. */
-export async function nextRoutine(db: Database, userId: string) {
+/**
+ * The routine to suggest: one planned for today (Monday = 0) if there is one,
+ * otherwise the one done longest ago.
+ */
+export async function nextRoutine(db: Database, userId: string, weekday?: number) {
   const last = sql<Date | null>`max(${workouts.finishedAt})`;
+  const plannedToday =
+    weekday == null
+      ? sql<boolean>`false`
+      : sql<boolean>`${weekday}::smallint = any(${routines.scheduleDays})`;
   const [row] = await db
-    .select({ id: routines.id, name: routines.name, lastDone: last })
+    .select({ id: routines.id, name: routines.name, lastDone: last, plannedToday })
     .from(routines)
     .leftJoin(workouts, and(eq(workouts.routineId, routines.id), eq(workouts.status, "completed")))
     .where(and(eq(routines.userId, userId), isNull(routines.archivedAt)))
     .groupBy(routines.id)
-    .orderBy(sql`${last} asc nulls first`, desc(routines.createdAt))
+    .orderBy(sql`${plannedToday} desc`, sql`${last} asc nulls first`, desc(routines.createdAt))
     .limit(1);
   return row ? { ...row, lastDone: row.lastDone ? new Date(row.lastDone) : null } : null;
 }
