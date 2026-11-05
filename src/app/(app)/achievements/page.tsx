@@ -1,8 +1,9 @@
-import { CheckCircle2, Circle, Trophy } from "lucide-react";
+import { CheckCircle2, Circle, History, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { db } from "@/db";
@@ -172,7 +173,15 @@ async function Achievements() {
 export default function AchievementsPage() {
   return (
     <>
-      <PageHeader title="Achievements" subtitle="Milestones and every personal record, by month" />
+      <PageHeader
+        title="Achievements"
+        subtitle="Milestones and every personal record, by month"
+        action={
+          <Link href="/timeline" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <History /> Timeline
+          </Link>
+        }
+      />
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <Achievements />
       </Suspense>

@@ -87,3 +87,19 @@ export async function previousComparable(db: Database, userId: string, workoutId
     .limit(1);
   return prev ?? null;
 }
+
+/** The first completed workout day each exercise appeared in, oldest first. */
+export async function firstPerformances(db: Database, userId: string) {
+  return db
+    .select({
+      exerciseId: workoutExercises.exerciseId,
+      name: exercises.name,
+      firstAt: sql<Date>`min(${workouts.startedAt})`.mapWith((v) => new Date(v)),
+    })
+    .from(workoutExercises)
+    .innerJoin(workouts, eq(workouts.id, workoutExercises.workoutId))
+    .innerJoin(exercises, eq(exercises.id, workoutExercises.exerciseId))
+    .where(and(eq(workouts.userId, userId), eq(workouts.status, "completed")))
+    .groupBy(workoutExercises.exerciseId, exercises.name)
+    .orderBy(sql`min(${workouts.startedAt})`);
+}
