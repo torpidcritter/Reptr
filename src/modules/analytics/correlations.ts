@@ -8,10 +8,10 @@ export type PerfSet = CalcSet & { workoutId: string; day: string; exerciseId: st
 export type Performance = { workoutId: string; day: string; score: number };
 
 /**
- * Per workout: the average, over its weighted exercises, of the session's best e1RM against
- * the mean of that exercise's previous three sessions, in percent. Needs two earlier sessions.
+ * Per workout and exercise: the session's best e1RM against the mean of that exercise's
+ * previous three sessions, in percent. An exercise needs two earlier sessions to count.
  */
-export function performanceByWorkout(sets: PerfSet[]): Performance[] {
+export function performanceDetail(sets: PerfSet[]) {
   // exercise -> sessions in order, each with its best e1RM
   const byExercise = new Map<string, { workoutId: string; day: string; best: number }[]>();
   const sorted = [...sets].sort((a, b) => a.day.localeCompare(b.day));
@@ -25,22 +25,27 @@ export function performanceByWorkout(sets: PerfSet[]): Performance[] {
     else list.push({ workoutId: s.workoutId, day: s.day, best: est });
     byExercise.set(s.exerciseId, list);
   }
-  const perWorkout = new Map<string, { day: string; ratios: number[] }>();
-  for (const list of byExercise.values()) {
+  const out = new Map<string, { day: string; exercises: { exerciseId: string; pct: number }[] }>();
+  for (const [exerciseId, list] of byExercise) {
     list.forEach((cur, i) => {
       if (i < 2) return;
       const prev = list.slice(Math.max(0, i - 3), i);
       const base = prev.reduce((a, p) => a + p.best, 0) / prev.length;
-      const w = perWorkout.get(cur.workoutId) ?? { day: cur.day, ratios: [] };
-      w.ratios.push((cur.best / base - 1) * 100);
-      perWorkout.set(cur.workoutId, w);
+      const w = out.get(cur.workoutId) ?? { day: cur.day, exercises: [] };
+      w.exercises.push({ exerciseId, pct: (cur.best / base - 1) * 100 });
+      out.set(cur.workoutId, w);
     });
   }
-  return [...perWorkout]
+  return out;
+}
+
+/** Per workout: the average of its exercises' scores from `performanceDetail`. */
+export function performanceByWorkout(sets: PerfSet[]): Performance[] {
+  return [...performanceDetail(sets)]
     .map(([workoutId, w]) => ({
       workoutId,
       day: w.day,
-      score: w.ratios.reduce((a, b) => a + b, 0) / w.ratios.length,
+      score: w.exercises.reduce((a, e) => a + e.pct, 0) / w.exercises.length,
     }))
     .sort((a, b) => a.day.localeCompare(b.day));
 }

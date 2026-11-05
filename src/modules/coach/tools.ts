@@ -17,6 +17,7 @@ import { loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, volumeBetween } from "@/modules/recovery/recovery";
 import { listRoutines } from "@/modules/routines/routines";
 import { fatigueFor } from "./fatigue-queries";
+import { sessionReviewFor, workoutOnOrBefore } from "./review-queries";
 
 export type CoachContext = { db: Database; userId: string; timeZone: string; now: Date };
 
@@ -221,6 +222,22 @@ export const tools: Record<string, Tool> = {
       "Reptr's read of accumulated fatigue over recent weeks: level (fresh, normal, building, deload), the reasons behind it, a confidence label and how many hard weeks in a row. Use for questions about tiredness, stalls or whether to deload.",
     parameters: z.object({}),
     run: async (ctx) => fatigueFor(ctx.db, ctx.userId, ctx.timeZone, ctx.now),
+  }),
+
+  review_workout: tool({
+    description:
+      "Rule-based review of one completed workout: headline, points that went well or need watching, and each exercise's change vs its recent sessions. Defaults to the latest workout; pass a date (YYYY-MM-DD) for the latest one on or before it.",
+    parameters: z.object({
+      date: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+    }),
+    run: async (ctx, { date }) => {
+      const id = await workoutOnOrBefore(ctx.db, ctx.userId, date);
+      if (!id) return { error: "No completed workout found around then." };
+      return sessionReviewFor(ctx.db, ctx.userId, id, ctx.timeZone);
+    },
   }),
 
   list_routines: tool({

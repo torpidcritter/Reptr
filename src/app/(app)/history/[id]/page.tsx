@@ -1,4 +1,4 @@
-import { ArrowLeft, GitCompareArrows, Repeat, Trophy } from "lucide-react";
+import { ArrowLeft, Bot, GitCompareArrows, Repeat, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -15,6 +15,8 @@ import { adherence } from "@/modules/workouts/estimate";
 import { summarize } from "@/modules/workouts/snapshot";
 import { previousComparable } from "@/modules/history/history";
 import { getWorkout } from "@/modules/workouts/workouts";
+import { sessionReviewFor } from "@/modules/coach/review-queries";
+import { cn } from "@/lib/utils";
 import { PendingWorkout } from "./pending";
 
 export const metadata: Metadata = { title: "Workout" };
@@ -25,11 +27,12 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [user, tz] = await Promise.all([requireUser(), getTimeZone()]);
-  const [w, profile, prs, prev] = await Promise.all([
+  const [w, profile, prs, prev, review] = await Promise.all([
     getWorkout(db, user.id, id),
     getProfile(user.id),
     recordsForWorkout(db, user.id, id),
     previousComparable(db, user.id, id),
+    sessionReviewFor(db, user.id, id, tz),
   ]);
   const prCount = Object.values(prs).flat().length;
   if (!w || w.status === "active" || w.status === "paused") return <PendingWorkout id={id} />;
@@ -95,6 +98,44 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
           <Trophy className="size-4" /> {prCount} personal {prCount === 1 ? "record" : "records"}{" "}
           this workout
         </p>
+      )}
+
+      {review && (
+        <Card className="mb-4">
+          <CardLabel>Session review</CardLabel>
+          <p className="mt-1 font-semibold">{review.headline}</p>
+          {review.points.some((p) => p.kind !== "records") && (
+            <ul className="mt-2 flex flex-col gap-1.5 text-sm">
+              {review.points
+                .filter((p) => p.kind !== "records")
+                .map((p) => (
+                  <li key={p.text} className="flex gap-2">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mt-1.5 size-2 shrink-0 rounded-full",
+                        p.tone === "good"
+                          ? "bg-accent"
+                          : p.tone === "watch"
+                            ? "bg-amber-500"
+                            : "bg-muted-foreground/50",
+                      )}
+                    />
+                    {p.text}
+                  </li>
+                ))}
+            </ul>
+          )}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-muted-foreground text-xs">{review.basis}</p>
+            <Link
+              href={`/coach?ask=${encodeURIComponent(`Review my ${w.name} workout on ${review.workout.date}. What should I change next time?`)}`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Bot /> Ask the coach
+            </Link>
+          </div>
+        </Card>
       )}
 
       <div className="flex flex-col gap-3">
