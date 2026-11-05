@@ -9,6 +9,14 @@ import { localDay } from "@/modules/analytics/insights";
 import { entrySchema, logEntry } from "@/modules/body/body";
 import { type ChatClient, runCoach, systemPrompt } from "@/modules/coach/agent";
 import type { Proposal } from "@/modules/coach/tools";
+import {
+  addMemory,
+  deleteMemory,
+  listMemories,
+  MemoryFullError,
+  memoryPrompt,
+  memorySchema,
+} from "@/modules/coach/memory";
 import { routineSchema, saveRoutine } from "@/modules/routines/routines";
 
 const historySchema = z
@@ -29,14 +37,19 @@ export async function askCoachAction(history: unknown): Promise<CoachReply> {
   if (!parsed.success || parsed.data.at(-1)!.role !== "user")
     return { error: "Something went wrong with that message." };
 
-  const [profile, tz] = await Promise.all([getProfile(user.id), getTimeZone()]);
+  const [profile, tz, memories] = await Promise.all([
+    getProfile(user.id),
+    getTimeZone(),
+    listMemories(db, user.id),
+  ]);
   const now = new Date();
-  const system = systemPrompt({
-    name: profile?.displayName ?? null,
-    units: profile?.unitSystem === "imperial" ? "imperial (lb, in)" : "metric (kg, cm)",
-    goal: profile?.goal ?? "all_round",
-    today: `${localDay(now, tz)} (${new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: tz }).format(now)})`,
-  });
+  const system =
+    systemPrompt({
+      name: profile?.displayName ?? null,
+      units: profile?.unitSystem === "imperial" ? "imperial (lb, in)" : "metric (kg, cm)",
+      goal: profile?.goal ?? "all_round",
+      today: `${localDay(now, tz)} (${new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: tz }).format(now)})`,
+    }) + memoryPrompt(memories);
   try {
     const client = new OpenAI({ apiKey: key }) as unknown as ChatClient;
     const out = await runCoach(
@@ -80,6 +93,7 @@ const proposalSchema = z.discriminatedUnion("kind", [
     kind: z.literal("log_weight"),
     payload: z.object({ day: z.string(), weightKg: z.number() }),
   }),
+  z.object({ kind: z.literal("remember"), payload: memorySchema }),
 ]);
 
 /** Carries out a change the coach proposed, after the user confirmed it. Re-validated here. */
@@ -99,6 +113,11 @@ export async function confirmProposalAction(
       revalidatePath("/routines");
       return { done: `Saved "${routine.name}" to your routines.` };
     }
+    if (p.data.kind === "remember") {
+      const added = await addMemory(db, user.id, p.data.payload);
+      revalidatePath("/coach");
+      return { done: added ? "Saved to the coach's memory." : "The coach already remembers that." };
+    }
     const entry = entrySchema.parse({
       day: p.data.payload.day,
       values: { weight: p.data.payload.weightKg },
@@ -107,7 +126,32 @@ export async function confirmProposalAction(
     revalidatePath("/physique");
     revalidatePath("/");
     return { done: "Weight logged." };
-  } catch {
+  } catch (e) {
+    if (e instanceof MemoryFullError) return { error: e.message };
     return { error: "That change didn't pass validation, so nothing was saved." };
   }
+}
+
+export async function addMemoryAction(payload: {
+  kind: string;
+  content: string;
+}): Promise<{ error?: string }> {
+  const user = await requireUser();
+  const m = memorySchema.safeParse(payload);
+  if (!m.success) return { error: m.error.issues[0].message };
+  try {
+    await addMemory(db, user.id, m.data);
+  } catch (e) {
+    if (e instanceof MemoryFullError) return { error: e.message };
+    throw e;
+  }
+  revalidatePath("/coach");
+  return {};
+}
+
+export async function deleteMemoryAction(id: string) {
+  const user = await requireUser();
+  if (!z.uuid().safeParse(id).success) return;
+  await deleteMemory(db, user.id, id);
+  revalidatePath("/coach");
 }
