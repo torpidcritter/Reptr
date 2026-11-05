@@ -18,6 +18,7 @@ import {
   memorySchema,
 } from "@/modules/coach/memory";
 import { routineSchema, saveRoutine } from "@/modules/routines/routines";
+import { applyProgram, programProposalSchema } from "@/modules/coach/apply-program";
 
 const historySchema = z
   .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(8000) }))
@@ -94,6 +95,7 @@ const proposalSchema = z.discriminatedUnion("kind", [
     payload: z.object({ day: z.string(), weightKg: z.number() }),
   }),
   z.object({ kind: z.literal("remember"), payload: memorySchema }),
+  z.object({ kind: z.literal("create_program"), payload: programProposalSchema }),
 ]);
 
 /** Carries out a change the coach proposed, after the user confirmed it. Re-validated here. */
@@ -112,6 +114,16 @@ export async function confirmProposalAction(
       await saveRoutine(db, user.id, routine);
       revalidatePath("/routines");
       return { done: `Saved "${routine.name}" to your routines.` };
+    }
+    if (p.data.kind === "create_program") {
+      const tz = await getTimeZone();
+      const out = await applyProgram(db, user.id, p.data.payload, localDay(new Date(), tz));
+      revalidatePath("/routines");
+      revalidatePath("/programs");
+      revalidatePath("/history");
+      return {
+        done: `Saved ${out.routines} routine${out.routines === 1 ? "" : "s"} and started "${out.block.name}".`,
+      };
     }
     if (p.data.kind === "remember") {
       const added = await addMemory(db, user.id, p.data.payload);
