@@ -59,7 +59,8 @@ async function strengthNow(db: Database, userId: string, exerciseId: string, tod
   return { best, points, today };
 }
 
-async function bodyweightNow(db: Database, userId: string) {
+/** Body-weight trend now, its weekly rate and how many weigh-ins the last 4 weeks hold. */
+export async function bodyweightNow(db: Database, userId: string) {
   const since = new Date(Date.now() - 120 * 86400000);
   const rows = await metricSeries(db, userId, "weight", since);
   const trend = trendLine(dailyReadings(rows.map((r) => ({ day: r.day, value: r.value }))));

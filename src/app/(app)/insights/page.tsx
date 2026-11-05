@@ -22,13 +22,16 @@ import {
   type RangeKey,
   ranges,
 } from "@/modules/analytics/insights";
-import { insightData } from "@/modules/analytics/insights-queries";
+import { insightData, mainLiftBests } from "@/modules/analytics/insights-queries";
 import {
   landmarkRead,
   last28Days,
   neglectedMuscles,
   trainingLoad,
 } from "@/modules/analytics/landmarks";
+import { strengthRatios } from "@/modules/analytics/ratios";
+import { displayWeight, weightUnitLabel } from "@/lib/units";
+import { bodyweightNow } from "@/modules/goals/goals";
 
 export const metadata: Metadata = { title: "Insights" };
 
@@ -85,10 +88,13 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
   // Twice the range (for the comparison) plus a day of slack for time zones.
   const from = new Date(`${weeks[0]}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - 7 * weeks.length - 1);
-  const [{ sets, links }, profile] = await Promise.all([
+  const [{ sets, links }, profile, liftBests, body] = await Promise.all([
     insightData(db, user.id, from),
     getProfile(user.id),
+    mainLiftBests(db, user.id),
+    bodyweightNow(db, user.id),
   ]);
+  const ratios = strengthRatios(liftBests, body.current);
   const units = profile?.unitSystem ?? "metric";
   const i = buildInsights(sets, links, weeks, tz);
   const today = localDay(new Date(), tz);
@@ -115,6 +121,7 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
 
   const day = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
   const weekLabel = (w: string) => day.format(new Date(`${w}T00:00:00Z`));
+  const kg = (v: number) => `${displayWeight(v, units, 1)} ${weightUnitLabel(units)}`;
   const perWeek = (n: number) => (n / weeks.length).toFixed(1).replace(/\.0$/, "");
 
   return (
@@ -275,6 +282,40 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
           </table>
         </Card>
       </div>
+
+      {ratios.length > 0 && (
+        <>
+          <h2 className="mt-8 mb-1 text-lg font-semibold">Strength for your body weight</h2>
+          <p className="text-muted-foreground mb-3 text-sm">
+            {body.current
+              ? `Best estimated 1RM in the last 6 months divided by your trend weight of ${kg(body.current)}. Milestones are common gym markers, not standards.`
+              : "Log your weight on the Body page to see these as multiples of body weight."}
+          </p>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {ratios.map((r) => (
+              <Card key={r.name}>
+                <Link
+                  href={`/exercises/${r.exerciseId}`}
+                  className="text-sm font-medium hover:underline"
+                >
+                  {r.name}
+                </Link>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">
+                  {r.ratio != null ? `${r.ratio.toFixed(2)}×` : kg(r.e1rm)}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {r.ratio != null && `${kg(r.e1rm)} est. 1RM`}
+                  {r.next != null && r.toNext != null
+                    ? ` · ${kg(r.toNext)} to ${r.next}×`
+                    : r.ratio != null
+                      ? " · past every milestone"
+                      : ""}
+                </p>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       {i.topLifts.length > 0 && (
         <>

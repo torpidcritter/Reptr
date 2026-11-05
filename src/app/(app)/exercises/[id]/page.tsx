@@ -6,7 +6,7 @@ import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { formatDate, formatRecord } from "@/lib/format";
-import { recordLabels } from "@/modules/analytics/calc";
+import { e1rm, e1rmFormulas, recordLabels } from "@/modules/analytics/calc";
 import { MetricChart, type MetricKind } from "@/components/charts/metric-chart";
 import { exerciseRecords, exerciseSessions } from "@/modules/analytics/records";
 import { isPlateau, sessionStats, suggestNext } from "@/modules/analytics/progression";
@@ -54,6 +54,19 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
   const points = stats
     .map((s) => ({ x: Date.parse(s.date), y: metric.pick(s) }))
     .filter((p): p is { x: number; y: number } => p.y != null);
+  // The set behind the best estimate, to show how the common formulas compare.
+  const bestSet = weighted
+    ? sessions
+        .flatMap((x) => x.sets)
+        .filter((x) => x.type !== "warmup")
+        .reduce<{ w: number; r: number; e: number } | null>((best, x) => {
+          const e = e1rm(x.weightKg, x.reps);
+          return e != null && x.reps! > 1 && (!best || e > best.e)
+            ? { w: x.weightKg!, r: x.reps!, e }
+            : best;
+        }, null)
+    : null;
+  const formulas = bestSet ? e1rmFormulas(bestSet.w, bestSet.r) : [];
   const stalled = isPlateau(stats.map(metric.pick));
   const reps = m === "weight_reps" || m === "reps" || m === "assisted_reps";
   const next = reps
@@ -187,6 +200,28 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
             <p className="text-muted-foreground mt-3 text-sm">
               Your best lifts for this exercise show up here once you log it in a workout.
             </p>
+          )}
+          {bestSet && formulas.length > 0 && (
+            <details className="mt-4 text-sm">
+              <summary className="text-muted-foreground cursor-pointer text-xs">
+                How 1RM formulas compare for {displayWeight(bestSet.w, units, 1)}{" "}
+                {weightUnitLabel(units)} × {bestSet.r}
+              </summary>
+              <dl className="mt-2 flex flex-col gap-1">
+                {formulas.map((f) => (
+                  <div key={f.name} className="flex justify-between">
+                    <dt className="text-muted-foreground">{f.name}</dt>
+                    <dd className="tabular-nums">
+                      {displayWeight(f.value, units, 1)} {weightUnitLabel(units)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-muted-foreground mt-2 text-xs">
+                Reptr uses Epley everywhere so your numbers stay comparable over time. All of these
+                are estimates; a true max can differ by several percent.
+              </p>
+            </details>
           )}
         </Card>
       </div>
