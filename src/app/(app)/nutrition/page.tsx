@@ -14,6 +14,7 @@ import { metricSeries } from "@/modules/body/body";
 import { dailyReadings, trendLine } from "@/modules/body/trend";
 import { dayLog, getTargets, recentFoods } from "@/modules/nutrition/nutrition";
 import { suggestTargets } from "@/modules/nutrition/targets";
+import { listSavedFoods } from "@/modules/nutrition/foods";
 import { FoodLog } from "./food-log";
 import { TargetsForm } from "./targets-form";
 
@@ -82,12 +83,13 @@ async function Day({ searchParams }: Pick<PageProps<"/nutrition">, "searchParams
   const defaultMeal =
     hour < 11 ? "breakfast" : hour < 15 ? "lunch" : hour < 21 ? "dinner" : ("snack" as const);
 
-  const [log, targets, recent, profile, weights] = await Promise.all([
+  const [log, targets, recent, profile, weights, saved] = await Promise.all([
     dayLog(db, user.id, day),
     getTargets(db, user.id),
     recentFoods(db, user.id),
     getProfile(user.id),
     metricSeries(db, user.id, "weight"),
+    listSavedFoods(db, user.id),
   ]);
   const trend = trendLine(dailyReadings(weights)).at(-1)?.value;
   const suggested = trend ? suggestTargets(trend, profile?.goal ?? "all_round") : null;
@@ -132,6 +134,7 @@ async function Day({ searchParams }: Pick<PageProps<"/nutrition">, "searchParams
               defaultMeal={defaultMeal}
               waterMl={log.waterMl}
               foods={log.foods}
+              saved={saved}
               recent={recent.map((r) => ({
                 name: r.name,
                 meal: r.meal,
