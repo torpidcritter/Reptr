@@ -158,3 +158,19 @@ export async function exerciseSessions(
   }
   return out;
 }
+
+/** Each exercise's best estimated max, strongest first, for the Progress page. */
+export async function bestLifts(db: Database, userId: string, limit = 5) {
+  const rows = await db
+    .selectDistinctOn([personalRecords.exerciseId], {
+      exerciseId: personalRecords.exerciseId,
+      exercise: exercises.name,
+      value: personalRecords.value,
+      achievedAt: personalRecords.achievedAt,
+    })
+    .from(personalRecords)
+    .innerJoin(exercises, eq(exercises.id, personalRecords.exerciseId))
+    .where(and(eq(personalRecords.userId, userId), eq(personalRecords.type, "best_e1rm")))
+    .orderBy(personalRecords.exerciseId, desc(personalRecords.value));
+  return rows.sort((a, b) => b.value - a.value).slice(0, limit);
+}

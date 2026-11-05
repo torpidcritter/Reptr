@@ -42,7 +42,7 @@ import { addDays } from "@/modules/history/schedule";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
 import { bodyweightNow } from "@/modules/goals/goals";
 
-export const metadata: Metadata = { title: "Insights" };
+export const metadata: Metadata = { title: "Detailed analysis" };
 
 type CheckinRow = Awaited<ReturnType<typeof checkinRange>>[number];
 type FoodRow = Awaited<ReturnType<typeof dailyTotals>>[number];
@@ -472,7 +472,10 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
 export default function InsightsPage({ searchParams }: PageProps<"/insights">) {
   return (
     <>
-      <PageHeader title="Insights" subtitle="Strength, volume and muscle analytics" />
+      <Link href="/progress" className="text-muted-foreground mb-2 inline-block text-sm">
+        ← Progress
+      </Link>
+      <PageHeader title="Detailed analysis" subtitle="Volume, training load and muscle balance" />
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <InsightsBody searchParams={searchParams} />
       </Suspense>
