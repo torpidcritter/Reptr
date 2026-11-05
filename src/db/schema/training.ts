@@ -152,6 +152,11 @@ export const workoutSets = pgTable(
     durationSeconds: integer("duration_seconds"),
     distanceMeters: numeric("distance_meters", { precision: 10, scale: 2, mode: "number" }),
     rpe: numeric("rpe", { precision: 3, scale: 1, mode: "number" }),
+    /** Reps in reserve: how many more reps were left in the tank. */
+    rir: integer("rir"),
+    /** Tempo as eccentric, pause, concentric, pause, e.g. "3010" or "31X0". */
+    tempo: text("tempo"),
+    notes: text("notes"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -178,6 +183,9 @@ export const workoutSets = pgTable(
       sql`${t.distanceMeters} is null or ${t.distanceMeters} >= 0`,
     ),
     check("workout_sets_rpe_range", sql`${t.rpe} is null or ${t.rpe} between 1 and 10`),
+    check("workout_sets_rir_range", sql`${t.rir} is null or ${t.rir} between 0 and 10`),
+    check("workout_sets_tempo_format", sql`${t.tempo} is null or ${t.tempo} ~ '^[0-9X]{4}$'`),
+    check("workout_sets_notes_length", sql`${t.notes} is null or char_length(${t.notes}) <= 200`),
     ownerPolicy("workout_sets", t.userId),
   ],
 );

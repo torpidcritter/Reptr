@@ -8,12 +8,20 @@ const num = (min: number, max: number) => z.number().min(min).max(max).nullable(
 
 export const setSnapshotSchema = z.object({
   id: z.uuid(),
-  type: z.enum(["warmup", "working", "drop", "failure"]),
+  type: z.enum(["warmup", "working", "drop", "failure", "rest_pause"]),
   weightKg: num(0, 1000),
   reps: z.number().int().min(0).max(1000).nullable(),
   durationSeconds: z.number().int().min(0).max(86400).nullable(),
   distanceMeters: num(0, 1_000_000),
   rpe: num(1, 10),
+  // Added later: snapshots saved on a device before then don't have these, so default them.
+  rir: z.number().int().min(0).max(10).nullable().default(null),
+  tempo: z
+    .string()
+    .regex(/^[0-9X]{4}$/, "Tempo is four digits, X for explosive, e.g. 3010")
+    .nullable()
+    .default(null),
+  note: z.string().trim().max(200).nullable().default(null),
   completedAt: z.iso.datetime().nullable(),
 });
 
@@ -73,6 +81,9 @@ export function emptySet(id: string, from?: Partial<SetSnapshot>): SetSnapshot {
     durationSeconds: from?.durationSeconds ?? null,
     distanceMeters: from?.distanceMeters ?? null,
     rpe: null,
+    rir: null,
+    tempo: from?.tempo ?? null,
+    note: null,
     completedAt: null,
   };
 }

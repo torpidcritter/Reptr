@@ -36,6 +36,13 @@
       "when": 1793818555550,
       "tag": "0004_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793862645997,
+      "tag": "0005_set_detail",
+      "breakpoints": true
     }
   ]
 }

@@ -17,7 +17,7 @@ import { PendingWorkout } from "./pending";
 
 export const metadata: Metadata = { title: "Workout" };
 
-const typeTag = { warmup: "W", working: "", drop: "D", failure: "F" } as const;
+const typeTag = { warmup: "W", working: "", drop: "D", failure: "F", rest_pause: "RP" } as const;
 
 async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
   const { id } = await params;
@@ -106,6 +106,20 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
                       .filter(Boolean)
                       .join(" × ")}
                   </span>
+                  {(s.rpe != null || s.rir != null || s.tempo) && (
+                    <span className="text-muted-foreground">
+                      {[
+                        s.rpe != null && `RPE ${s.rpe}`,
+                        s.rir != null && `${s.rir} RIR`,
+                        s.tempo && `tempo ${s.tempo}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                  {s.note && (
+                    <span className="text-muted-foreground basis-full pl-9">{s.note}</span>
+                  )}
                   {prs[s.id] && (
                     <span
                       className="text-accent inline-flex basis-full items-center gap-1 pl-9 text-xs font-medium"

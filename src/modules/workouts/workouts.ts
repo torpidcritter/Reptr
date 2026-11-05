@@ -103,6 +103,9 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
           durationSeconds: s.durationSeconds,
           distanceMeters: s.distanceMeters,
           rpe: s.rpe,
+          rir: s.rir ?? null,
+          tempo: s.tempo ?? null,
+          notes: s.note ?? null,
           completedAt: s.completedAt ? new Date(s.completedAt) : null,
         })),
       );
@@ -189,6 +192,9 @@ function toSetSnapshot(s: typeof workoutSets.$inferSelect): SetSnapshot {
     durationSeconds: s.durationSeconds,
     distanceMeters: s.distanceMeters,
     rpe: s.rpe,
+    rir: s.rir,
+    tempo: s.tempo,
+    note: s.notes,
     completedAt: s.completedAt?.toISOString() ?? null,
   };
 }
