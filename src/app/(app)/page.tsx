@@ -18,6 +18,7 @@ import { metricSeries } from "@/modules/body/body";
 import { dailyReadings, trendLine, weeklyRate } from "@/modules/body/trend";
 import { nextRoutine, weekStreak } from "@/modules/dashboard/dashboard";
 import { weekdayOf } from "@/modules/history/schedule";
+import { fatigueFor } from "@/modules/coach/fatigue-queries";
 
 function Stat({
   label,
@@ -55,12 +56,13 @@ async function Dashboard() {
   const since = new Date(from);
   since.setUTCDate(since.getUTCDate() - 7); // ~ 17 weeks of weigh-ins
 
-  const [profile, next, data, weights, prs] = await Promise.all([
+  const [profile, next, data, weights, prs, fatigue] = await Promise.all([
     getProfile(user.id),
     nextRoutine(db, user.id, weekdayOf(localDay(new Date(), tz))),
     insightData(db, user.id, from),
     metricSeries(db, user.id, "weight", since),
     recentRecords(db, user.id, 5),
+    fatigueFor(db, user.id, tz),
   ]);
   const units = profile?.unitSystem ?? "metric";
   const i = buildInsights(data.sets, data.links, weeks, tz);
@@ -74,6 +76,16 @@ async function Dashboard() {
 
   return (
     <>
+      {fatigue.level === "deload" && (
+        <Link href="/recovery" className="mb-4 block">
+          <Card className="hover:bg-muted border-amber-500/40 py-3 text-sm transition-colors">
+            <span className="font-medium">Time for a lighter week?</span>{" "}
+            <span className="text-muted-foreground">
+              {fatigue.reasons.length} signs of accumulated fatigue. See why on Recovery.
+            </span>
+          </Card>
+        </Link>
+      )}
       <Card className="mb-4 flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-4">
           <div className="bg-accent-soft flex size-12 shrink-0 items-center justify-center rounded-xl">

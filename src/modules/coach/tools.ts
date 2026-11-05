@@ -16,6 +16,7 @@ import { dailyTotals, getTargets } from "@/modules/nutrition/nutrition";
 import { loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, volumeBetween } from "@/modules/recovery/recovery";
 import { listRoutines } from "@/modules/routines/routines";
+import { fatigueFor } from "./fatigue-queries";
 
 export type CoachContext = { db: Database; userId: string; timeZone: string; now: Date };
 
@@ -213,6 +214,13 @@ export const tools: Record<string, Tool> = {
         })),
       };
     },
+  }),
+
+  fatigue_check: tool({
+    description:
+      "Reptr's read of accumulated fatigue over recent weeks: level (fresh, normal, building, deload), the reasons behind it, a confidence label and how many hard weeks in a row. Use for questions about tiredness, stalls or whether to deload.",
+    parameters: z.object({}),
+    run: async (ctx) => fatigueFor(ctx.db, ctx.userId, ctx.timeZone, ctx.now),
   }),
 
   list_routines: tool({

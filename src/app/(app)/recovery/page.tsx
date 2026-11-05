@@ -10,6 +10,8 @@ import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
 import { loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, getCheckin, volumeBetween } from "@/modules/recovery/recovery";
+import { FatigueCard } from "@/components/recovery/fatigue-card";
+import { fatigueFor } from "@/modules/coach/fatigue-queries";
 import { CheckinForm } from "./checkin-form";
 
 export const metadata: Metadata = { title: "Recovery" };
@@ -28,12 +30,13 @@ async function Recovery() {
   const from = shift(today, -13);
   const day = (n: number) => new Date(now.getTime() - n * 86400000);
 
-  const [checkin, history, last7, last28, profile] = await Promise.all([
+  const [checkin, history, last7, last28, profile, fatigue] = await Promise.all([
     getCheckin(db, user.id, today),
     checkinRange(db, user.id, from, today),
     volumeBetween(db, user.id, day(7), now),
     volumeBetween(db, user.id, day(28), now),
     getProfile(user.id),
+    fatigueFor(db, user.id, tz, now),
   ]);
   const ratio = loadRatio(last7, last28);
   const r = readiness(checkin, ratio);
@@ -94,6 +97,8 @@ async function Recovery() {
             </p>
           )}
         </Card>
+
+        <FatigueCard f={fatigue} />
 
         <Card>
           <CardLabel>Sleep, last 14 days</CardLabel>
