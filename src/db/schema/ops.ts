@@ -1,6 +1,16 @@
-import { index, integer, jsonb, pgPolicy, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgPolicy,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { authenticatedRole } from "drizzle-orm/supabase";
-import { createdAt, id, isOwner, userId } from "./helpers";
+import { createdAt, id, isOwner, ownerPolicy, userId } from "./helpers";
 
 /**
  * Fixed-window request counters, one row per key (for example "coach:<user id>").
@@ -35,4 +45,19 @@ export const auditLog = pgTable(
       using: isOwner(t.userId),
     }),
   ],
+);
+
+/**
+ * Changes queued on a device while offline carry an id. The server notes each id it has
+ * applied, so a retry after a dropped response never logs the same food twice.
+ */
+export const appliedOps = pgTable(
+  "applied_ops",
+  {
+    userId: userId(),
+    opId: uuid("op_id").notNull(),
+    kind: text("kind").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.opId] }), ownerPolicy("applied_ops", t.userId)],
 );

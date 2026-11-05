@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { inToCm, lbToKg, type UnitSystem, weightUnitLabel } from "@/lib/units";
 import { metricLabels, type MetricType, tapeTypes } from "@/modules/body/metrics";
-import { logEntryAction } from "./actions";
+import { queuedMessage, sendOrQueue } from "@/lib/outbox";
+import { cn } from "@/lib/utils";
 
 const today = () => {
   const d = new Date();
@@ -47,13 +48,13 @@ export function EntryForm({ units }: { units: UnitSystem }) {
               : inToCm(n);
     }
     start(async () => {
-      const res = await logEntryAction({
+      const res = await sendOrQueue("body", {
         day,
         values: out,
         bodyFatMethod: out.body_fat ? method : null,
       });
       if (res.error) return setError(res.error);
-      setError(null);
+      setError(res.queued ? queuedMessage : null);
       setValues({});
       setSaved(true);
     });
@@ -115,7 +116,17 @@ export function EntryForm({ units }: { units: UnitSystem }) {
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save check-in"}
         </Button>
-        {error && <p className="text-danger text-sm">{error}</p>}
+        {error && (
+          <p
+            role="status"
+            className={cn(
+              "text-sm",
+              error === queuedMessage ? "text-muted-foreground" : "text-danger",
+            )}
+          >
+            {error}
+          </p>
+        )}
         {saved && !error && <p className="text-muted-foreground text-sm">Saved.</p>}
       </div>
     </form>

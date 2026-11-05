@@ -4,7 +4,9 @@ import { Droplet, Plus, Trash2, Undo2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { addFoodAction, addWaterAction, deleteFoodAction, saveFoodAction } from "./actions";
+import { queuedMessage, sendOrQueue } from "@/lib/outbox";
+import { cn } from "@/lib/utils";
+import { deleteFoodAction, saveFoodAction } from "./actions";
 import { MyFoods, type SavedFood } from "./my-foods";
 
 const meals = [
@@ -54,8 +56,8 @@ export function FoodLog({
 
   const add = (f: RecentFood) =>
     start(async () => {
-      const res = await addFoodAction({ ...f, day });
-      setError(res.error ?? null);
+      const res = await sendOrQueue("food", { ...f, day });
+      setError(res.error ?? (res.queued ? queuedMessage : null));
     });
 
   const submit = (e: React.FormEvent) => {
@@ -69,16 +71,26 @@ export function FoodLog({
       fatG: num(form.fatG),
     };
     start(async () => {
-      const res = await addFoodAction({ ...entry, day });
+      const res = await sendOrQueue("food", { ...entry, day });
       if (res.error) return setError(res.error);
-      const kept = keep ? await saveFoodAction(entry) : {};
-      setError(kept.error ? `Logged, but not saved to your foods: ${kept.error}` : null);
+      const kept = keep && !res.queued ? await saveFoodAction(entry) : {};
+      setError(
+        res.queued
+          ? queuedMessage
+          : kept.error
+            ? `Logged, but not saved to your foods: ${kept.error}`
+            : null,
+      );
       setKeep(false);
       setForm({ name: "", calories: "", proteinG: "", carbsG: "", fatG: "" });
     });
   };
 
-  const water = (ml: number) => start(() => addWaterAction(day, ml));
+  const water = (ml: number) =>
+    start(async () => {
+      const res = await sendOrQueue("water", { day, ml });
+      setError(res.error ?? (res.queued ? queuedMessage : null));
+    });
   const macro = (k: "proteinG" | "carbsG" | "fatG", label: string) => (
     <label className="flex flex-col gap-1">
       <span className="text-muted-foreground text-xs">{label} (g)</span>
@@ -140,7 +152,17 @@ export function FoodLog({
             />
             Save to my foods
           </label>
-          {error && <p className="text-danger text-sm">{error}</p>}
+          {error && (
+            <p
+              role="status"
+              className={cn(
+                "text-sm",
+                error === queuedMessage ? "text-muted-foreground" : "text-danger",
+              )}
+            >
+              {error}
+            </p>
+          )}
         </div>
       </form>
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { BottomNav, Sidebar } from "@/components/layout/app-nav";
+import { OutboxSyncer } from "@/components/layout/outbox-syncer";
 import { TimezoneCookie } from "@/components/layout/timezone-cookie";
 import { ActiveWorkoutPill } from "@/components/workout/active-workout-pill";
 import { WorkoutSyncer } from "@/components/workout/workout-syncer";
@@ -28,6 +29,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </div>
       <BottomNav />
       <WorkoutSyncer />
+      <OutboxSyncer />
       <TimezoneCookie />
       <Suspense fallback={null}>
         <ActiveWorkoutPill />
