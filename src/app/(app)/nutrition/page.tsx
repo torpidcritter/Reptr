@@ -17,6 +17,7 @@ import { suggestTargets } from "@/modules/nutrition/targets";
 import { listSavedFoods } from "@/modules/nutrition/foods";
 import { FoodLog } from "./food-log";
 import { TargetsForm } from "./targets-form";
+import { WeekReport } from "./week-report";
 
 export const metadata: Metadata = { title: "Nutrition" };
 
@@ -192,6 +193,11 @@ export default function NutritionPage({ searchParams }: PageProps<"/nutrition">)
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <Day searchParams={searchParams} />
       </Suspense>
+      <div className="mt-4">
+        <Suspense fallback={null}>
+          <WeekReport />
+        </Suspense>
+      </div>
     </>
   );
 }
