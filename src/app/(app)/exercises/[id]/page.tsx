@@ -12,7 +12,7 @@ import { exerciseRecords, exerciseSessions } from "@/modules/analytics/records";
 import { isPlateau, sessionStats, suggestNext } from "@/modules/analytics/progression";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
 import { categories, measurements } from "@/modules/exercises/custom";
-import { getExercise } from "@/modules/exercises/queries";
+import { getExercise, similarExercises } from "@/modules/exercises/queries";
 
 const label = (list: readonly { value: string; label: string }[], v: string) =>
   list.find((x) => x.value === v)?.label ?? v;
@@ -21,12 +21,13 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const user = await requireUser();
-  const [exercise, records, sessions, profile, tz] = await Promise.all([
+  const [exercise, records, sessions, profile, tz, alternatives] = await Promise.all([
     getExercise(db, user.id, id),
     exerciseRecords(db, user.id, id),
     exerciseSessions(db, user.id, id),
     getProfile(user.id),
     getTimeZone(),
+    similarExercises(db, user.id, id, 5),
   ]);
   if (!exercise) notFound();
   const units = profile?.unitSystem ?? "metric";
@@ -64,6 +65,7 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
   const w = (kg: number) => `${displayWeight(kg, units, 1)} ${weightUnitLabel(units)}`;
 
   const facts = [
+    exercise.difficulty && difficultyLabels[exercise.difficulty],
     label(categories, exercise.category),
     exercise.equipment,
     label(measurements, exercise.measurement),
@@ -186,15 +188,76 @@ async function ExerciseDetail({ params }: Pick<PageProps<"/exercises/[id]">, "pa
               Your best lifts for this exercise show up here once you log it in a workout.
             </p>
           )}
-          {exercise.formCues && (
-            <>
-              <CardLabel className="mt-5">Form cues</CardLabel>
-              <p className="mt-2 text-sm whitespace-pre-line">{exercise.formCues}</p>
-            </>
-          )}
         </Card>
       </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {(exercise.formCues || exercise.commonMistakes || exercise.safetyNotes) && (
+          <Card>
+            <Notes title="How to do it" text={exercise.formCues} numbered />
+            <Notes title="Common mistakes" text={exercise.commonMistakes} />
+            <Notes title="Safety" text={exercise.safetyNotes} />
+            {exercise.safetyNotes && (
+              <p className="text-muted-foreground mt-4 text-xs">
+                General guidance, not medical advice. If something hurts, stop and get it checked.
+              </p>
+            )}
+          </Card>
+        )}
+        {alternatives.length > 0 && (
+          <Card>
+            <CardLabel>Alternatives</CardLabel>
+            <p className="text-muted-foreground mt-1 text-xs">
+              Similar training effect, for when the equipment is busy or something doesn&apos;t feel
+              right.
+            </p>
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {alternatives.map((a) => (
+                <li key={a.id}>
+                  <Link href={`/exercises/${a.id}`} className="font-medium hover:underline">
+                    {a.name}
+                  </Link>
+                  <p className="text-muted-foreground text-xs">{a.reason}</p>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
     </>
+  );
+}
+
+const difficultyLabels = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+} as const;
+
+/** A titled list from one-per-line text. Renders nothing when there's no text. */
+function Notes({
+  title,
+  text,
+  numbered,
+}: {
+  title: string;
+  text: string | null;
+  numbered?: boolean;
+}) {
+  if (!text) return null;
+  const items = text.split("\n").filter(Boolean);
+  const List = numbered ? "ol" : "ul";
+  return (
+    <div className="mt-4 first:mt-0">
+      <CardLabel>{title}</CardLabel>
+      <List
+        className={`mt-2 flex flex-col gap-1 pl-5 text-sm ${numbered ? "list-decimal" : "list-disc"}`}
+      >
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </List>
+    </div>
   );
 }
 

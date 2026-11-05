@@ -1,5 +1,6 @@
 import type postgres from "postgres";
 import { exercises } from "./exercises";
+import { difficultyFor, guidanceFor } from "./guidance";
 import { equipmentList, muscles } from "./muscles";
 
 const PRIMARY_THRESHOLD = 0.75;
@@ -33,14 +34,19 @@ export async function seed(sql: postgres.Sql) {
     );
 
     for (const e of exercises) {
+      const g = guidanceFor(e);
       const [row] = await tx`
-        insert into exercises (slug, name, category, measurement, equipment_id, movement_pattern, is_unilateral, is_archived)
+        insert into exercises (slug, name, category, measurement, equipment_id, movement_pattern,
+                               is_unilateral, is_archived, form_cues, common_mistakes, safety_notes, difficulty)
         values (${e.slug}, ${e.name}, ${e.category}, ${e.measurement}, ${equipmentIds.get(e.equipment)!},
-                ${e.pattern}, ${e.unilateral}, false)
+                ${e.pattern}, ${e.unilateral}, false, ${g.cues.join("\n")}, ${g.mistakes.join("\n")},
+                ${g.safety.join("\n")}, ${difficultyFor(e)})
         on conflict (slug) where owner_id is null do update
         set name = excluded.name, category = excluded.category, measurement = excluded.measurement,
             equipment_id = excluded.equipment_id, movement_pattern = excluded.movement_pattern,
-            is_unilateral = excluded.is_unilateral, is_archived = false, updated_at = now()
+            is_unilateral = excluded.is_unilateral, is_archived = false,
+            form_cues = excluded.form_cues, common_mistakes = excluded.common_mistakes,
+            safety_notes = excluded.safety_notes, difficulty = excluded.difficulty, updated_at = now()
         returning id`;
 
       await tx`delete from exercise_muscles where exercise_id = ${row.id}`;
