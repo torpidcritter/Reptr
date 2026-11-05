@@ -2,7 +2,7 @@
 // so the numbers are the same wherever they appear.
 
 export type CalcSet = {
-  type: "warmup" | "working" | "drop" | "failure";
+  type: "warmup" | "working" | "drop" | "failure" | "rest_pause";
   weightKg: number | null;
   reps: number | null;
   durationSeconds: number | null;

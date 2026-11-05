@@ -3,7 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, testDatabaseUrl } from "@/db/test/test-db";
 import { exerciseRecords, recordsForWorkout } from "@/modules/analytics/records";
 import { getRoutine, routineSchema, saveRoutine } from "@/modules/routines/routines";
-import { isSetFilled, summarize, workoutSnapshotSchema, type WorkoutSnapshot } from "./snapshot";
+import {
+  isSetFilled,
+  setSnapshotSchema,
+  summarize,
+  workoutSnapshotSchema,
+  type WorkoutSnapshot,
+} from "./snapshot";
 import { emptyWorkout, exerciseFor, plannedSets, workoutFromRoutine } from "./start";
 import {
   getActiveWorkout,
@@ -32,6 +38,9 @@ describe("workout helpers", () => {
           durationSeconds: null,
           distanceMeters: null,
           rpe: null,
+          rir: null,
+          tempo: null,
+          note: null,
           completedAt: "x",
         },
         {
@@ -42,6 +51,9 @@ describe("workout helpers", () => {
           durationSeconds: null,
           distanceMeters: null,
           rpe: null,
+          rir: null,
+          tempo: null,
+          note: null,
           completedAt: "x",
         },
         {
@@ -52,6 +64,9 @@ describe("workout helpers", () => {
           durationSeconds: null,
           distanceMeters: null,
           rpe: null,
+          rir: null,
+          tempo: null,
+          note: null,
           completedAt: "x",
         },
       ],
@@ -72,6 +87,25 @@ describe("workout helpers", () => {
     expect(isSetFilled({ ...s, reps: 8 }, "assisted_reps")).toBe(true);
     expect(isSetFilled({ ...s, durationSeconds: 60 }, "time")).toBe(true);
     expect(isSetFilled({ ...s, durationSeconds: 600 }, "distance_time")).toBe(false);
+  });
+
+  it("reads snapshots saved before RIR, tempo and notes existed", () => {
+    const w = emptyWorkout();
+    w.exercises.push(
+      exerciseFor(
+        { exerciseId: randomUUID(), name: "Squat", measurement: "weight_reps" },
+        { sets: 1 },
+      ),
+    );
+    const old = structuredClone(w) as unknown as {
+      exercises: { sets: Record<string, unknown>[] }[];
+    };
+    for (const k of ["rir", "tempo", "note"]) delete old.exercises[0].sets[0][k];
+    const parsed = workoutSnapshotSchema.parse(old);
+    expect(parsed.exercises[0].sets[0]).toMatchObject({ rir: null, tempo: null, note: null });
+    expect(() =>
+      setSnapshotSchema.parse({ ...parsed.exercises[0].sets[0], tempo: "fast" }),
+    ).toThrow();
   });
 
   it("names an empty workout by time of day", () => {
@@ -114,6 +148,10 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
       ...w.exercises[0].sets[0],
       weightKg: 60,
       reps: 8,
+      rpe: 8.5,
+      rir: 1,
+      tempo: "31X0",
+      note: "Paused first rep",
       completedAt: new Date().toISOString(),
     };
     workoutSnapshotSchema.parse(w);
@@ -129,7 +167,14 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
       ["Barbell Bench Press", 3],
       ["Barbell Row", 2],
     ]);
-    expect(active!.exercises[0].sets[0]).toMatchObject({ weightKg: 60, reps: 8 });
+    expect(active!.exercises[0].sets[0]).toMatchObject({
+      weightKg: 60,
+      reps: 8,
+      rpe: 8.5,
+      rir: 1,
+      tempo: "31X0",
+      note: "Paused first rep",
+    });
     expect(await getActiveWorkout(t.db, bob)).toBeNull();
   });
 

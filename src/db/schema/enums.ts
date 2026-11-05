@@ -41,7 +41,7 @@ export const workoutStatus = pgEnum("workout_status", [
   "abandoned",
 ]);
 
-export const setType = pgEnum("set_type", ["warmup", "working", "drop", "failure"]);
+export const setType = pgEnum("set_type", ["warmup", "working", "drop", "failure", "rest_pause"]);
 
 export const recordType = pgEnum("record_type", [
   "heaviest_weight",

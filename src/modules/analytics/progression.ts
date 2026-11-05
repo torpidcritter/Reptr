@@ -47,7 +47,9 @@ export function suggestNext(
   opts: { repMin?: number; repMax?: number; incrementKg?: number; weighted?: boolean } = {},
 ): Suggestion {
   const { repMin = 8, repMax = 12, incrementKg = 2.5, weighted = true } = opts;
-  const work = (last ?? []).filter((s) => isWorkingSet(s) && s.type !== "drop" && s.reps);
+  const work = (last ?? []).filter(
+    (s) => isWorkingSet(s) && s.type !== "drop" && s.type !== "rest_pause" && s.reps,
+  );
   if (!work.length) return { kind: "start", reason: "Log this exercise once to get a target." };
 
   if (!weighted) {
