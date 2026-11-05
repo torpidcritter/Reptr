@@ -21,9 +21,14 @@ import {
   parseRange,
   type RangeKey,
   ranges,
-  volumeBand,
 } from "@/modules/analytics/insights";
 import { insightData } from "@/modules/analytics/insights-queries";
+import {
+  landmarkRead,
+  last28Days,
+  neglectedMuscles,
+  trainingLoad,
+} from "@/modules/analytics/landmarks";
 
 export const metadata: Metadata = { title: "Insights" };
 
@@ -86,6 +91,14 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
   ]);
   const units = profile?.unitSystem ?? "metric";
   const i = buildInsights(sets, links, weeks, tz);
+  const today = localDay(new Date(), tz);
+  const load = trainingLoad(
+    last28Days(
+      sets.filter((s) => s.type !== "warmup").map((s) => localDay(s.startedAt, tz)),
+      today,
+    ),
+  );
+  const neglected = neglectedMuscles(new Map(i.muscleAvg.map((m) => [m.muscle, m.avg])));
 
   if (!i.totals.workouts && !i.previous.workouts) {
     return (
@@ -147,6 +160,61 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
         />
       </Card>
 
+      <div className="mb-4 grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardLabel>Load this week</CardLabel>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">{load.acute} sets</p>
+          {load.ratio != null && (
+            <p className="text-muted-foreground text-xs">
+              {load.ratio.toFixed(2)}× your 4-week average of {Math.round(load.chronic)}
+            </p>
+          )}
+          <p className="text-muted-foreground mt-1 text-sm">
+            {load.read === "spike"
+              ? "A big jump on recent weeks. Sudden spikes are when niggles tend to start, so build up gradually."
+              : load.read === "drop"
+                ? "Well below your recent average. Fine for a deload or a busy week."
+                : load.read === "steady"
+                  ? "In line with your recent training."
+                  : "Train for a few weeks to compare against."}
+          </p>
+        </Card>
+        <Card>
+          <CardLabel>Monotony and strain</CardLabel>
+          <p className="mt-1 text-2xl font-semibold tabular-nums">
+            {load.monotony >= 10 ? "10+" : load.monotony.toFixed(1)}
+            <span className="text-muted-foreground ml-2 text-sm font-normal">
+              strain {Math.round(load.strain).toLocaleString("en")}
+            </span>
+          </p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {load.acute === 0
+              ? "No training in the last 7 days."
+              : load.monotonous
+                ? "Very similar load every day. Mixing hard and easy days, with rest days, helps recovery."
+                : "Good mix of harder, easier and rest days over the last 7 days. Monotony under 2 is healthy."}
+          </p>
+        </Card>
+        <Card>
+          <CardLabel>Getting little work</CardLabel>
+          {neglected.length ? (
+            <>
+              <p className="mt-1 text-sm font-medium">
+                {neglected.map((m) => muscleName.get(m) ?? m).join(", ")}
+              </p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Under 2 sets a week over {ranges[range].label}. Fine if that&apos;s on purpose;
+                otherwise a couple of sets a week keeps them in balance.
+              </p>
+            </>
+          ) : (
+            <p className="text-muted-foreground mt-1 text-sm">
+              Every major muscle gets at least 2 sets a week. Nicely balanced.
+            </p>
+          )}
+        </Card>
+      </div>
+
       <div className="mb-4 grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardLabel>Muscle heatmap</CardLabel>
@@ -164,8 +232,9 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
         <Card className="lg:col-span-2">
           <CardLabel>Sets per muscle per week</CardLabel>
           <p className="text-muted-foreground mt-1 mb-3 text-xs">
-            Average over {ranges[range].label}. Most people grow well on 10–20 hard sets a week.
-            Secondary muscles count as half a set.
+            Average over {ranges[range].label}, read against rough per-muscle guides: maintenance,
+            light, productive, near max and above max. Secondary muscles count as half a set. People
+            differ, so watch your own progress too.
           </p>
           <table className="w-full text-sm">
             <thead className="sr-only">
@@ -177,7 +246,8 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
             </thead>
             <tbody>
               {i.muscleAvg.map((m) => {
-                const band = volumeBand(m.avg);
+                const band = landmarkRead(m.muscle, m.avg);
+                const l = band.landmarks;
                 return (
                   <tr key={m.muscle} className="border-border border-b last:border-0">
                     <td className="py-1.5">{muscleName.get(m.muscle) ?? m.muscle}</td>
@@ -185,8 +255,13 @@ async function InsightsBody({ searchParams }: Pick<PageProps<"/insights">, "sear
                       {m.avg.toFixed(1)}
                     </td>
                     <td
+                      title={
+                        l
+                          ? `Maintenance under ${l.mev}, productive ${l.mavLow}–${l.mavHigh}, max about ${l.mrv}`
+                          : undefined
+                      }
                       className={cn(
-                        "w-24 py-1.5 pl-3 text-right text-xs",
+                        "w-28 py-1.5 pl-3 text-right text-xs",
                         band.tone === "ok" ? "text-foreground" : "text-muted-foreground",
                       )}
                     >
