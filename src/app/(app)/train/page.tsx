@@ -1,4 +1,12 @@
-import { CalendarDays, ChevronRight, Library, ListChecks, Play, Target } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  Library,
+  ListChecks,
+  Play,
+  Target,
+  Trophy,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ComponentType } from "react";
@@ -66,6 +74,12 @@ export default function Page() {
           icon={Target}
           title="Goals"
           body="Targets for lifts, body weight and consistency"
+        />
+        <NavCard
+          href="/achievements"
+          icon={Trophy}
+          title="Achievements"
+          body="Milestones and your personal records timeline"
         />
       </div>
     </>

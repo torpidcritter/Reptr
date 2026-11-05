@@ -1,4 +1,4 @@
-import { ArrowLeft, Repeat, Trophy } from "lucide-react";
+import { ArrowLeft, GitCompareArrows, Repeat, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,6 +13,7 @@ import { recordLabels } from "@/modules/analytics/calc";
 import { recordsForWorkout } from "@/modules/analytics/records";
 import { adherence } from "@/modules/workouts/estimate";
 import { summarize } from "@/modules/workouts/snapshot";
+import { previousComparable } from "@/modules/history/history";
 import { getWorkout } from "@/modules/workouts/workouts";
 import { PendingWorkout } from "./pending";
 
@@ -24,10 +25,11 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [user, tz] = await Promise.all([requireUser(), getTimeZone()]);
-  const [w, profile, prs] = await Promise.all([
+  const [w, profile, prs, prev] = await Promise.all([
     getWorkout(db, user.id, id),
     getProfile(user.id),
     recordsForWorkout(db, user.id, id),
+    previousComparable(db, user.id, id),
   ]);
   const prCount = Object.values(prs).flat().length;
   if (!w || w.status === "active" || w.status === "paused") return <PendingWorkout id={id} />;
@@ -48,12 +50,22 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
             {formatDate(start, tz, { year: "numeric", hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
-        <Link
-          href={`/workout?repeat=${w.id}`}
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          <Repeat /> Repeat
-        </Link>
+        <div className="flex flex-wrap justify-end gap-2">
+          {prev && (
+            <Link
+              href={`/history/compare?a=${prev.id}&b=${w.id}`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <GitCompareArrows /> Compare with last time
+            </Link>
+          )}
+          <Link
+            href={`/workout?repeat=${w.id}`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Repeat /> Repeat
+          </Link>
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-3 gap-3">

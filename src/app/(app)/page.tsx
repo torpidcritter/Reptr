@@ -172,7 +172,12 @@ async function Dashboard() {
           </div>
         </Card>
         <Card>
-          <CardLabel>Recent records</CardLabel>
+          <div className="flex items-center justify-between">
+            <CardLabel>Recent records</CardLabel>
+            <Link href="/achievements" className="text-accent text-xs font-medium hover:underline">
+              All achievements
+            </Link>
+          </div>
           {prs.length ? (
             <ul className="mt-3 flex flex-col gap-2.5 text-sm">
               {prs.map((r) => (

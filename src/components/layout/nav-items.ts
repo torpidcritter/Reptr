@@ -11,7 +11,7 @@ export const navItems = [
 
 /** Sub-sections that live under a nav item, e.g. the exercise library under Train. */
 const sections: Record<string, string[]> = {
-  "/train": ["/exercises", "/routines", "/workout", "/history", "/goals"],
+  "/train": ["/exercises", "/routines", "/workout", "/history", "/goals", "/achievements"],
   "/physique": ["/nutrition", "/recovery"],
 };
 
