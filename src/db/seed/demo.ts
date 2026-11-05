@@ -1,5 +1,6 @@
-// Fills a development database with ~10 weeks of training for one user, so charts,
-// records and insights have something to show. Never run it against real data.
+// Fills the sample account with ~10 weeks of training, weigh-ins and check-ins, so
+// charts and insights can be tried out. It only ever writes to DEMO_USER_ID, never to
+// a real user, and creates that account if needed. View it with REPTR_DEMO=1.
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -9,10 +10,19 @@ import { entrySchema, logEntry } from "@/modules/body/body";
 import { checkinSchema, saveCheckin } from "@/modules/recovery/recovery";
 import { emptyWorkout, exerciseFor } from "@/modules/workouts/start";
 import { saveWorkoutSnapshot } from "@/modules/workouts/workouts";
+import { DEMO_USER_ID } from "@/lib/demo";
 
 const url = process.env.DATABASE_URL;
-const userId = process.argv[2] ?? process.env.REPTR_DEV_USER_ID;
-if (!url || !userId) throw new Error("Set DATABASE_URL and pass a user id");
+if (!url) throw new Error("Set DATABASE_URL");
+const asked = process.argv[2];
+if (asked && asked !== DEMO_USER_ID) {
+  console.error(
+    `Sample data only goes into the demo account (${DEMO_USER_ID}), never a real user's. ` +
+      "Run `pnpm db:demo` with no user id.",
+  );
+  process.exit(1);
+}
+const userId = DEMO_USER_ID;
 
 const days = [
   {
@@ -44,6 +54,17 @@ const days = [
 async function main() {
   const sql = postgres(url!, { max: 1, prepare: false, onnotice: () => {} });
   const db = drizzle(sql, { schema }) as unknown as Database;
+  await sql`insert into auth.users (id, email) values (${userId}, 'demo@reptr.local')
+    on conflict (id) do nothing`;
+  await sql`insert into profiles (user_id, display_name, unit_system, goal, training_days_per_week, onboarded_at)
+    values (${userId}, 'Demo', 'metric', 'hypertrophy', 3, now())
+    on conflict (user_id) do nothing`;
+  const [{ n }] = await sql`select count(*)::int as n from workouts where user_id = ${userId}`;
+  if (n > 0) {
+    console.log("The demo account already has sample data. Nothing added.");
+    await sql.end();
+    return;
+  }
   const rows = await sql`select id, slug, name, measurement from exercises where owner_id is null`;
   const bySlug = new Map(rows.map((r) => [r.slug as string, r]));
   let count = 0;
@@ -73,7 +94,7 @@ async function main() {
       }
       w.status = "completed";
       w.finishedAt = new Date(start.getTime() + 55 * 60000).toISOString();
-      await saveWorkoutSnapshot(db, userId!, w);
+      await saveWorkoutSnapshot(db, userId, w);
       count++;
     }
   }
@@ -92,7 +113,7 @@ async function main() {
     }
     await logEntry(
       db,
-      userId!,
+      userId,
       entrySchema.parse({ day, values, bodyFatMethod: values.body_fat ? "scale" : null }),
     );
     weighIns++;
@@ -102,7 +123,7 @@ async function main() {
     const day = new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
     await saveCheckin(
       db,
-      userId!,
+      userId,
       checkinSchema.parse({
         day,
         sleepHours: Math.round((7.2 + Math.sin(d * 1.3) * 0.9) * 4) / 4,

@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db, schema } from "@/db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { DEMO_USER_ID } from "./demo";
 
 /** The signed-in user, verified with Supabase Auth. Cached per request. */
 export const getUser = cache(async () => {
-  const devUser = localDevUser();
+  const devUser = (await e2eUser()) ?? localDevUser();
   if (devUser) return devUser;
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
@@ -30,17 +31,32 @@ export const getProfile = cache(async (userId: string) => {
 });
 
 /**
- * Local development without Supabase: set REPTR_DEV_USER_ID (and leave the Supabase
- * variables unset) to act as that user. Ignored outside `next dev`.
+ * Local use without Supabase: set REPTR_DEV_USER_ID (and leave the Supabase variables
+ * unset) to act as that user, or REPTR_DEMO=1 to look around the sample account.
+ * Ignored when Supabase is configured, and outside development unless REPTR_LOCAL=1
+ * (the laptop install runs a production build on the owner's own machine).
  */
 function localDevUser() {
-  const id = process.env.REPTR_DEV_USER_ID;
-  if (process.env.NODE_ENV !== "development" || !id || process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  const id = process.env.REPTR_DEMO === "1" ? DEMO_USER_ID : process.env.REPTR_DEV_USER_ID;
+  const local = process.env.NODE_ENV === "development" || process.env.REPTR_LOCAL === "1";
+  if (!local || !id || process.env.NEXT_PUBLIC_SUPABASE_URL) {
     return null;
   }
   return { id, email: "dev@localhost" } as Awaited<
     ReturnType<Awaited<ReturnType<typeof createSupabaseServerClient>>["auth"]["getUser"]>
   >["data"]["user"];
+}
+
+/**
+ * End-to-end tests only (REPTR_E2E=1 in dev mode): a test can act as another local user
+ * through a cookie, to cover a brand-new account or check two users can't see each other.
+ */
+async function e2eUser() {
+  if (process.env.REPTR_E2E !== "1" || process.env.NODE_ENV !== "development") return null;
+  const { cookies } = await import("next/headers");
+  const id = (await cookies()).get("reptr-e2e-user")?.value;
+  if (!id || !/^[0-9a-f-]{36}$/.test(id)) return null;
+  return { ...localDevUser()!, id };
 }
 
 /** The user's time zone from the device, or UTC until the browser has reported it. */

@@ -3,12 +3,15 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { requireUser } from "@/lib/auth";
-import { onboardingSchema, type OnboardingInput } from "@/modules/profile/onboarding";
+import { getTimeZone, requireUser } from "@/lib/auth";
+import { logEntry } from "@/modules/body/body";
+import { onboardingFromForm, onboardingSchema } from "@/modules/profile/onboarding";
 
 export type OnboardingState = { errors?: Record<string, string[] | undefined> };
 
-async function saveProfile(userId: string, values: Partial<OnboardingInput>) {
+type ProfileValues = Omit<Partial<typeof schema.profiles.$inferInsert>, "userId">;
+
+async function saveProfile(userId: string, values: ProfileValues) {
   const row = { ...values, onboardedAt: new Date() };
   await db
     .insert(schema.profiles)
@@ -21,10 +24,18 @@ export async function completeOnboarding(
   formData: FormData,
 ): Promise<OnboardingState> {
   const user = await requireUser();
-  const parsed = onboardingSchema.safeParse(Object.fromEntries(formData));
+  const parsed = onboardingSchema.safeParse(onboardingFromForm(formData));
   if (!parsed.success) return { errors: z.flattenError(parsed.error).fieldErrors };
 
-  await saveProfile(user.id, parsed.data);
+  const { weightKg, ...profile } = parsed.data;
+  await saveProfile(user.id, profile);
+  // The weight they gave becomes their first weigh-in, dated today where they are.
+  if (weightKg) {
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: await getTimeZone() }).format(
+      new Date(),
+    );
+    await logEntry(db, user.id, { day, values: { weight: weightKg }, bodyFatMethod: null });
+  }
   redirect("/");
 }
 

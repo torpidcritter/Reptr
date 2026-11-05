@@ -9,7 +9,8 @@ export type Targets = {
   waterMl: number;
 };
 
-export type Goal = "all_round" | "hypertrophy" | "strength" | "recomposition" | "conditioning";
+export type Goal =
+  "all_round" | "hypertrophy" | "strength" | "recomposition" | "conditioning" | "maintenance";
 
 const calorieFactor: Record<Goal, number> = {
   all_round: 1,
@@ -17,6 +18,7 @@ const calorieFactor: Record<Goal, number> = {
   hypertrophy: 1.1, // a modest surplus
   recomposition: 0.85, // a moderate deficit
   conditioning: 1,
+  maintenance: 1,
 };
 
 const proteinPerKg: Record<Goal, number> = {
@@ -25,6 +27,7 @@ const proteinPerKg: Record<Goal, number> = {
   hypertrophy: 1.8,
   recomposition: 2.2, // higher protein protects muscle in a deficit
   conditioning: 1.6,
+  maintenance: 1.6,
 };
 
 const round = (n: number, to: number) => Math.round(n / to) * to;
