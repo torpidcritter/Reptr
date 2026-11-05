@@ -36,6 +36,88 @@ export async function logEntry(db: Database, userId: string, e: Entry) {
   await db.insert(bodyMetrics).values(rows);
 }
 
+/**
+ * One weigh-in. Times are the wall-clock time where the user was, stored as if UTC (like
+ * the midday check-ins), so a reading never moves to another day in any time zone.
+ */
+export const weightSchema = z.object({
+  weightKg: z
+    .number({ error: "Enter your weight." })
+    .min(20, "That weight looks too low. Check the units.")
+    .max(400, "That weight looks too high. Check the units."),
+  day,
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Pick a time")
+    .default("12:00"),
+  note: z.string().trim().max(200, "Keep the note under 200 characters.").default(""),
+});
+export type WeightInput = z.input<typeof weightSchema>;
+
+const wallClock = (w: z.infer<typeof weightSchema>) => new Date(`${w.day}T${w.time}:00Z`);
+
+export async function logWeight(db: Database, userId: string, w: z.infer<typeof weightSchema>) {
+  const [row] = await db
+    .insert(bodyMetrics)
+    .values({
+      userId,
+      type: "weight",
+      value: Math.round(w.weightKg * 100) / 100,
+      recordedAt: wallClock(w),
+      notes: w.note || null,
+    })
+    .returning({ id: bodyMetrics.id });
+  return row.id;
+}
+
+/** Changes a weigh-in. Returns false if it isn't this user's. */
+export async function updateWeight(
+  db: Database,
+  userId: string,
+  id: string,
+  w: z.infer<typeof weightSchema>,
+) {
+  const rows = await db
+    .update(bodyMetrics)
+    .set({
+      value: Math.round(w.weightKg * 100) / 100,
+      recordedAt: wallClock(w),
+      notes: w.note || null,
+    })
+    .where(
+      and(eq(bodyMetrics.id, id), eq(bodyMetrics.userId, userId), eq(bodyMetrics.type, "weight")),
+    )
+    .returning({ id: bodyMetrics.id });
+  return rows.length > 0;
+}
+
+/** Weigh-ins, newest first, for the history list. */
+export async function weightHistory(db: Database, userId: string, limit = 60) {
+  const rows = await db
+    .select({
+      id: bodyMetrics.id,
+      value: bodyMetrics.value,
+      recordedAt: bodyMetrics.recordedAt,
+      notes: bodyMetrics.notes,
+    })
+    .from(bodyMetrics)
+    .where(and(eq(bodyMetrics.userId, userId), eq(bodyMetrics.type, "weight")))
+    .orderBy(desc(bodyMetrics.recordedAt))
+    .limit(limit);
+  return rows.map((r) => {
+    const iso = r.recordedAt.toISOString();
+    return {
+      id: r.id,
+      weightKg: r.value,
+      day: iso.slice(0, 10),
+      // Readings logged without a time are stored at midday; show no time for those.
+      time: iso.slice(11, 19) === "12:00:00" ? null : iso.slice(11, 16),
+      note: r.notes ?? "",
+    };
+  });
+}
+export type WeighIn = Awaited<ReturnType<typeof weightHistory>>[number];
+
 export async function deleteMetric(db: Database, userId: string, id: string) {
   await db.delete(bodyMetrics).where(and(eq(bodyMetrics.id, id), eq(bodyMetrics.userId, userId)));
 }

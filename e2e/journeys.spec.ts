@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 test("log a workout from an empty start to its summary", async ({ page }) => {
   await page.goto("/workout");
-  await page.getByRole("button", { name: "Start an empty workout" }).click();
+  await page.getByRole("button", { name: "Start empty workout" }).click();
   await page.getByRole("button", { name: "Add exercise" }).click();
   await page.getByPlaceholder("Search exercises").fill("barbell bench");
   await page
@@ -55,7 +55,7 @@ test("a food logged offline syncs once the connection is back", async ({ page, c
   await expect(page.getByText("E2E offline toast", { exact: true })).toHaveCount(1);
 });
 
-test("check in and log body weight", async ({ page }) => {
+test("daily check-in saves", async ({ page }) => {
   await page.goto("/recovery");
   await page.getByLabel("Sleep (hours)").fill("7.5");
   await page
@@ -63,14 +63,43 @@ test("check in and log body weight", async ({ page }) => {
     .first()
     .click();
   await expect(page.getByText("Saved.")).toBeVisible();
+});
 
+test("log weight from Today, then edit and delete it", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Log weight" }).click();
+  const sheet = page.getByRole("dialog", { name: "Log weight" });
+  await sheet.getByLabel("Weight (kg)").fill("81.3");
+  await sheet.getByLabel("Note (optional)").fill("e2e morning");
+  await sheet.getByRole("button", { name: "Save weight" }).click();
+  await expect(sheet).toBeHidden();
+
+  // It persists across a reload and shows on the Body page.
   await page.goto("/physique");
-  await page.getByLabel(/Weight in kg/).fill("80");
+  await page.reload();
+  await expect(page.getByText("81.3 kg").first()).toBeVisible();
+  await page.getByText(/All weigh-ins/).click();
+  await expect(page.getByText(/e2e morning/)).toBeVisible();
+
   await page
-    .getByRole("button", { name: /^Save|^Log/ })
+    .getByRole("button", { name: /^Edit weigh-in/ })
     .first()
     .click();
-  await expect(page.getByText("Saved.")).toBeVisible();
+  const edit = page.getByRole("dialog", { name: "Edit weigh-in" });
+  await edit.getByLabel("Weight (kg)").fill("80.9");
+  await edit.getByRole("button", { name: "Save changes" }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByText("80.9 kg").first()).toBeVisible();
+
+  await page
+    .getByRole("button", { name: /^Delete weigh-in/ })
+    .first()
+    .click();
+  await page
+    .getByRole("dialog", { name: "Delete this weigh-in?" })
+    .getByRole("button", { name: "Delete" })
+    .click();
+  await expect(page.getByText(/e2e morning/)).toHaveCount(0);
 });
 
 test("download your data and see it in account activity", async ({ page }) => {

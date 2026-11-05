@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dailyReadings, trendLine, weeklyRate } from "./trend";
+import { dailyReadings, trendLine, weeklyRate, changeOver } from "./trend";
 
 describe("weight trend", () => {
   it("averages several weigh-ins on one day", () => {
@@ -39,5 +39,23 @@ describe("weight trend", () => {
     });
     expect(weeklyRate(steady)).toBeCloseTo(-0.5, 2);
     expect(weeklyRate(steady.slice(0, 3))).toBeNull();
+  });
+});
+
+describe("changeOver", () => {
+  const r = (day: string, value: number) => ({ day, value });
+  it("compares the latest reading with the last one at least that many days before", () => {
+    const xs = [
+      r("2026-10-01", 80),
+      r("2026-10-20", 79.4),
+      r("2026-10-28", 79),
+      r("2026-11-04", 78.6),
+    ];
+    expect(changeOver(xs, 7)).toBe(-0.4);
+    expect(changeOver(xs, 30)).toBe(-1.4);
+  });
+  it("gives nothing without a reading that far back", () => {
+    expect(changeOver([r("2026-11-01", 80), r("2026-11-04", 79)], 7)).toBeNull();
+    expect(changeOver([r("2026-11-04", 79)], 1)).toBeNull();
   });
 });

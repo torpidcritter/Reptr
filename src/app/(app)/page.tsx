@@ -1,235 +1,245 @@
-import { Dumbbell, Flame, Play, Trophy } from "lucide-react";
+import { CircleUser, Dumbbell, ListPlus, Play, Salad, Sparkles, Trophy } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { BarChart } from "@/components/charts/bar-chart";
-import { PageHeader } from "@/components/layout/page-header";
+import { LogWeightButton } from "@/components/body/log-weight";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardLabel } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
-import { formatDate, formatRecord, formatVolume } from "@/lib/format";
+import { formatRecord } from "@/lib/format";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
-import { recordLabels } from "@/modules/analytics/calc";
-import { buildInsights, lastWeeks, localDay } from "@/modules/analytics/insights";
-import { insightData } from "@/modules/analytics/insights-queries";
+import { cn } from "@/lib/utils";
+import { localDay } from "@/modules/analytics/insights";
 import { recentRecords } from "@/modules/analytics/records";
 import { metricSeries } from "@/modules/body/body";
 import { dailyReadings, trendLine, weeklyRate } from "@/modules/body/trend";
-import { nextRoutine, weekStreak } from "@/modules/dashboard/dashboard";
-import { weekdayOf } from "@/modules/history/schedule";
 import { fatigueFor } from "@/modules/coach/fatigue-queries";
+import { nextRoutine } from "@/modules/dashboard/dashboard";
+import { listWorkoutHistory, trainingDays } from "@/modules/history/history";
+import { addDays, plannedByWeekday, weekdayNames, weekdayOf } from "@/modules/history/schedule";
+import { listRoutines } from "@/modules/routines/routines";
 
-function Stat({
-  label,
-  value,
-  hint,
-  href,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  href?: string;
-}) {
-  const body = (
-    <Card className="h-full">
-      <CardLabel>{label}</CardLabel>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-      <p className="text-muted-foreground mt-1 text-xs">{hint}</p>
-    </Card>
-  );
-  return href ? (
-    <Link href={href} className="hover:[&>div]:border-accent/40 block">
-      {body}
-    </Link>
-  ) : (
-    body
-  );
+function greeting(hour: number) {
+  if (hour < 5) return "Good evening";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 async function Dashboard() {
   const [user, tz] = await Promise.all([requireUser(), getTimeZone()]);
-  await connection(); // "this week" depends on the request time
-  const weeks = lastWeeks(localDay(new Date(), tz), 8);
-  const from = new Date(`${weeks[0]}T00:00:00Z`);
-  from.setUTCDate(from.getUTCDate() - 7 * weeks.length - 1);
-  const since = new Date(from);
-  since.setUTCDate(since.getUTCDate() - 7); // ~ 17 weeks of weigh-ins
+  await connection(); // "today" depends on the request time
+  const now = new Date();
+  const today = localDay(now, tz);
+  const weekStart = addDays(today, -weekdayOf(today));
+  const week = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  const [profile, next, data, weights, prs, fatigue] = await Promise.all([
+  const [profile, next, routines, done, recent, weights, records, fatigue] = await Promise.all([
     getProfile(user.id),
-    nextRoutine(db, user.id, weekdayOf(localDay(new Date(), tz))),
-    insightData(db, user.id, from),
-    metricSeries(db, user.id, "weight", since),
-    recentRecords(db, user.id, 5),
+    nextRoutine(db, user.id, weekdayOf(today)),
+    listRoutines(db, user.id),
+    trainingDays(
+      db,
+      user.id,
+      new Date(Date.parse(`${weekStart}T00:00:00Z`) - 86400000),
+      new Date(Date.parse(`${addDays(weekStart, 7)}T00:00:00Z`) + 86400000),
+      tz,
+    ),
+    listWorkoutHistory(db, user.id, { limit: 1 }),
+    metricSeries(db, user.id, "weight", new Date(now.getTime() - 60 * 86400000)),
+    recentRecords(db, user.id, 10),
     fatigueFor(db, user.id, tz),
   ]);
   const units = profile?.unitSystem ?? "metric";
-  const i = buildInsights(data.sets, data.links, weeks, tz);
-  const thisWeek = i.weekly.at(-1)!;
-  const lastWeek = i.weekly.at(-2)!;
-  const target = profile?.trainingDaysPerWeek;
-  const streak = weekStreak(i.weekly.map((w) => w.workouts));
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: tz }).format(
+      now,
+    ),
+  );
+  const dateLabel = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: tz,
+  }).format(now);
+
+  // Which days this week are training days: routines planned on them, else the days
+  // picked in onboarding.
+  const planned = plannedByWeekday(routines);
+  const plannedDays = planned.some((p) => p.length)
+    ? planned.map((p) => p.length > 0)
+    : Array.from({ length: 7 }, (_, i) => profile?.trainingDays?.includes(i) ?? false);
+  const doneDays = new Set(done);
+  const doneThisWeek = week.filter((d) => doneDays.has(d)).length;
+  const target = plannedDays.filter(Boolean).length || profile?.trainingDaysPerWeek || 0;
+  const plannedToday = next?.plannedToday ? next : null;
+  const trainedToday = doneDays.has(today);
+  const isNew = recent.length === 0;
+
+  // One insight, the most useful available, and only from real data.
   const trend = trendLine(dailyReadings(weights));
   const rate = weeklyRate(trend);
+  const lastWeek = new Date(now.getTime() - 7 * 86400000);
+  const freshRecord = records.find(
+    (r) => r.achievedAt >= lastWeek && (r.type === "best_e1rm" || r.type === "heaviest_weight"),
+  );
   const kg = (v: number, d = 1) => `${displayWeight(v, units, d)} ${weightUnitLabel(units)}`;
+  const insight =
+    fatigue.level === "deload"
+      ? {
+          href: "/recovery",
+          text: `Time for a lighter week? ${fatigue.reasons.length} signs of built-up fatigue.`,
+        }
+      : freshRecord
+        ? {
+            href: `/exercises/${freshRecord.exerciseId}`,
+            text: `New best on ${freshRecord.exercise}: ${formatRecord(freshRecord.type, freshRecord.value, units)}${freshRecord.type === "best_e1rm" ? " estimated max" : ""}.`,
+          }
+        : rate != null && Math.abs(rate) >= 0.05
+          ? {
+              href: "/physique",
+              text: `Your weight is trending ${rate > 0 ? "up" : "down"} ${kg(Math.abs(rate), 2)} a week.`,
+            }
+          : null;
 
   return (
-    <>
-      {fatigue.level === "deload" && (
-        <Link href="/recovery" className="mb-4 block">
-          <Card className="hover:bg-muted border-amber-500/40 py-3 text-sm transition-colors">
-            <span className="font-medium">Time for a lighter week?</span>{" "}
-            <span className="text-muted-foreground">
-              {fatigue.reasons.length} signs of accumulated fatigue. See why on Recovery.
-            </span>
+    <div className="flex flex-col gap-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-muted-foreground text-sm">{dateLabel}</p>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            {greeting(hour)}
+            {profile?.displayName ? `, ${profile.displayName}` : ""}
+          </h1>
+        </div>
+        <Link
+          href="/profile"
+          aria-label="Profile and settings"
+          className="text-muted-foreground hover:text-foreground -mr-2 flex size-10 items-center justify-center rounded-full md:hidden"
+        >
+          <CircleUser className="size-6" />
+        </Link>
+      </header>
+
+      {isNew ? (
+        <EmptyState
+          icon={Dumbbell}
+          title="Your training journey starts here"
+          body="Start a workout and add exercises as you go, or build a routine you can repeat."
+          action={
+            <>
+              <Link href="/workout" className={buttonVariants({ size: "lg" })}>
+                <Play /> Start workout
+              </Link>
+              <Link
+                href="/routines/new"
+                className={buttonVariants({ variant: "outline", size: "lg" })}
+              >
+                <ListPlus /> Create routine
+              </Link>
+            </>
+          }
+        />
+      ) : (
+        <section aria-label="Today's training" className="flex flex-col gap-2">
+          {plannedToday && !trainedToday && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Planned today: </span>
+              <span className="font-semibold">{plannedToday.name}</span>
+            </p>
+          )}
+          <Link
+            href={
+              plannedToday && !trainedToday ? `/workout?routine=${plannedToday.id}` : "/workout"
+            }
+            className={buttonVariants({ size: "lg", className: "w-full" })}
+          >
+            <Play />
+            {plannedToday && !trainedToday ? `Start ${plannedToday.name}` : "Start workout"}
+          </Link>
+          {plannedToday && !trainedToday && (
+            <Link href="/workout" className="text-accent self-center text-sm font-medium">
+              Start a different workout
+            </Link>
+          )}
+        </section>
+      )}
+
+      <section aria-labelledby="week-title">
+        <div className="mb-2 flex items-baseline justify-between">
+          <h2 id="week-title" className="font-semibold">
+            This week
+          </h2>
+          <Link href="/plan" className="text-muted-foreground text-sm">
+            {doneThisWeek}
+            {target ? ` of ${target}` : ""} workout{(target || doneThisWeek) === 1 ? "" : "s"}
+          </Link>
+        </div>
+        <ol className="grid grid-cols-7 gap-1 text-center">
+          {week.map((d, i) => {
+            const trained = doneDays.has(d);
+            const isPlanned = plannedDays[i];
+            return (
+              <li key={d} className="flex flex-col items-center gap-1">
+                <span
+                  className={cn(
+                    "text-xs",
+                    d === today ? "text-foreground font-semibold" : "text-muted-foreground",
+                  )}
+                >
+                  {weekdayNames[i].slice(0, 1)}
+                </span>
+                <span
+                  aria-label={`${weekdayNames[i]}${trained ? ", trained" : isPlanned ? ", planned" : ""}`}
+                  className={cn(
+                    "flex size-9 items-center justify-center rounded-full border-2",
+                    trained
+                      ? "bg-accent border-accent text-accent-foreground"
+                      : isPlanned
+                        ? "border-accent/50 border-dashed"
+                        : "bg-muted border-transparent",
+                  )}
+                >
+                  {trained && <Dumbbell className="size-4" />}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+
+      <section aria-label="Quick actions" className="grid grid-cols-2 gap-2">
+        <LogWeightButton units={units} className="h-12" />
+        <Link
+          href="/nutrition"
+          className={buttonVariants({ variant: "outline", className: "h-12" })}
+        >
+          <Salad /> Log food
+        </Link>
+      </section>
+
+      {insight && (
+        <Link href={insight.href}>
+          <Card className="hover:bg-muted flex items-start gap-3 transition-colors">
+            {freshRecord && fatigue.level !== "deload" ? (
+              <Trophy className="text-accent mt-0.5 size-5 shrink-0" />
+            ) : (
+              <Sparkles className="text-accent mt-0.5 size-5 shrink-0" />
+            )}
+            <p className="text-sm">{insight.text}</p>
           </Card>
         </Link>
       )}
-      <Card className="mb-4 flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="bg-accent-soft flex size-12 shrink-0 items-center justify-center rounded-xl">
-            <Dumbbell className="text-accent size-6" />
-          </div>
-          <div>
-            <CardLabel>
-              {next?.plannedToday ? "Planned today" : next ? "Up next" : "Today's workout"}
-            </CardLabel>
-            <p className="mt-0.5 text-lg font-semibold">{next ? next.name : "No routines yet"}</p>
-            <p className="text-muted-foreground text-sm">
-              {next
-                ? next.lastDone
-                  ? `Last done ${formatDate(next.lastDone, tz)}`
-                  : "Not done yet"
-                : "Start an empty workout, or build a routine to plan your week."}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {next && (
-            <Link
-              href="/workout"
-              className={buttonVariants({
-                variant: "outline",
-                size: "lg",
-                className: "flex-1 md:flex-none",
-              })}
-            >
-              Pick another
-            </Link>
-          )}
-          <Link
-            href={next ? `/workout?routine=${next.id}` : "/workout"}
-            className={buttonVariants({ size: "lg", className: "flex-1 md:flex-none" })}
-          >
-            <Play /> Start {next ? next.name : "workout"}
-          </Link>
-        </div>
-      </Card>
-
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          label="This week"
-          value={target ? `${thisWeek.workouts} / ${target}` : String(thisWeek.workouts)}
-          hint={target ? "workouts vs your target" : "workouts so far"}
-          href="/history"
-        />
-        <Stat
-          label="Streak"
-          value={`${streak} ${streak === 1 ? "week" : "weeks"}`}
-          hint="in a row with a workout"
-        />
-        <Stat
-          label="Volume this week"
-          value={thisWeek.volume ? formatVolume(thisWeek.volume, units) : "—"}
-          hint={
-            lastWeek.volume ? `${formatVolume(lastWeek.volume, units)} last week` : "weight × reps"
-          }
-          href="/insights"
-        />
-        <Stat
-          label="Body weight"
-          value={trend.length ? kg(trend.at(-1)!.value) : "—"}
-          hint={
-            rate != null
-              ? `trend, ${rate === 0 ? "steady" : `${rate > 0 ? "+" : "−"}${kg(Math.abs(rate), 2)} a week`}`
-              : trend.length
-                ? "trend weight"
-                : "log a weigh-in"
-          }
-          href="/physique"
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardLabel>Weekly volume</CardLabel>
-          <div className="mt-3">
-            <BarChart
-              name="Weekly volume, last 8 weeks"
-              kind="volume"
-              units={units}
-              height={160}
-              bars={i.weekly.map((w) => ({
-                key: w.week,
-                label: new Intl.DateTimeFormat("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  timeZone: "UTC",
-                }).format(new Date(`${w.week}T00:00:00Z`)),
-                value: w.volume,
-                detail: `${w.workouts} ${w.workouts === 1 ? "workout" : "workouts"}`,
-              }))}
-            />
-          </div>
-        </Card>
-        <Card>
-          <div className="flex items-center justify-between">
-            <CardLabel>Recent records</CardLabel>
-            <Link href="/achievements" className="text-accent text-xs font-medium hover:underline">
-              All achievements
-            </Link>
-          </div>
-          {prs.length ? (
-            <ul className="mt-3 flex flex-col gap-2.5 text-sm">
-              {prs.map((r) => (
-                <li key={r.id} className="flex items-start gap-2">
-                  <Trophy className="text-accent mt-0.5 size-4 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/exercises/${r.exerciseId}`}
-                      className="block truncate font-medium hover:underline"
-                    >
-                      {r.exercise}
-                    </Link>
-                    <span className="text-muted-foreground text-xs">
-                      {recordLabels[r.type]} · {formatDate(r.achievedAt, tz)}
-                    </span>
-                  </div>
-                  <span className="font-semibold tabular-nums">
-                    {formatRecord(r.type, r.value, units)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground mt-3 flex items-center gap-2 text-sm">
-              <Flame className="size-4" /> Finish a workout to start setting records.
-            </p>
-          )}
-        </Card>
-      </div>
-    </>
+    </div>
   );
 }
 
 export default function Home() {
   return (
-    <>
-      <PageHeader title="Today" subtitle="Your training at a glance" />
-      <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
-        <Dashboard />
-      </Suspense>
-    </>
+    <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
+      <Dashboard />
+    </Suspense>
   );
 }

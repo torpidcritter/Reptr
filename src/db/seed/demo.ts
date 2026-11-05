@@ -58,7 +58,8 @@ async function main() {
     on conflict (id) do nothing`;
   await sql`insert into profiles (user_id, display_name, unit_system, goal, training_days_per_week, onboarded_at)
     values (${userId}, 'Demo', 'metric', 'hypertrophy', 3, now())
-    on conflict (user_id) do nothing`;
+    on conflict (user_id) do update set display_name = 'Demo',
+      onboarded_at = coalesce(profiles.onboarded_at, now())`;
   const [{ n }] = await sql`select count(*)::int as n from workouts where user_id = ${userId}`;
   if (n > 0) {
     console.log("The demo account already has sample data. Nothing added.");

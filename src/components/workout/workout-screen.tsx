@@ -1,6 +1,7 @@
 "use client";
 
-import { CloudOff, Dumbbell, Loader2, Play, Plus } from "lucide-react";
+import Link from "next/link";
+import { CloudOff, Loader2, Play, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
@@ -94,40 +95,54 @@ function StartPanel({ routines, startFrom }: { routines: RoutineOption[]; startF
   }, []);
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Start a workout</h1>
-      {routines.length > 0 && (
-        <div className="grid gap-2 md:grid-cols-2">
-          {routines.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              disabled={pending}
-              onClick={() => begin({ routine: r.id })}
-              className="text-left"
-            >
-              <Card className="hover:bg-muted flex items-center gap-3 transition-colors">
-                <div className="bg-accent-soft flex size-10 items-center justify-center rounded-xl">
-                  <Play className="text-accent size-4" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold">{r.name}</p>
-                  <p className="text-muted-foreground text-xs">{r.exerciseCount} exercises</p>
-                </div>
-              </Card>
-            </button>
-          ))}
-        </div>
-      )}
-      <Button
-        variant={routines.length ? "outline" : "primary"}
-        size="lg"
-        disabled={pending}
-        onClick={() => begin()}
-      >
-        <Dumbbell /> Start an empty workout
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Start a workout</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Add exercises as you go, or start from a routine.
+        </p>
+      </div>
+      <Button size="lg" disabled={pending} onClick={() => begin()} className="w-full">
+        <Play /> {pending ? "Starting…" : "Start empty workout"}
       </Button>
       {error && <p className="text-danger text-sm">{error}</p>}
+      <section aria-labelledby="routines-title" className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <h2 id="routines-title" className="font-semibold">
+            Or start a routine
+          </h2>
+          <Link href="/routines/new" className="text-accent text-sm font-medium">
+            New routine
+          </Link>
+        </div>
+        {routines.length > 0 ? (
+          <div className="grid gap-2 md:grid-cols-2">
+            {routines.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                disabled={pending}
+                onClick={() => begin({ routine: r.id })}
+                className="text-left"
+              >
+                <Card className="hover:bg-muted flex items-center gap-3 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-semibold">{r.name}</p>
+                    <p className="text-muted-foreground text-xs">
+                      {r.exerciseCount} exercise{r.exerciseCount === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <Play className="text-accent size-4" />
+                </Card>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Save the exercises you do often as a routine, and start them here in one tap.
+          </p>
+        )}
+      </section>
     </div>
   );
 }
