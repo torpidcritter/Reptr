@@ -252,6 +252,14 @@ function Logger({ settings }: { settings: Settings }) {
       <ExercisePicker
         open={picker != null}
         onClose={() => setPicker(null)}
+        similarTo={
+          picker?.mode === "swap"
+            ? {
+                id: workout.exercises[picker.index].exerciseId,
+                name: workout.exercises[picker.index].name,
+              }
+            : undefined
+        }
         onPick={async (picked) => {
           const p = await previousPerformanceAction([picked.id]).catch(
             () => ({}) as PreviousPerformance,
@@ -286,7 +294,30 @@ function Logger({ settings }: { settings: Settings }) {
           }
         }}
       />
+      <UndoRemoveBar />
       <RestTimer />
+    </div>
+  );
+}
+
+/** Offers to bring back a set deleted in the last few seconds. */
+function UndoRemoveBar() {
+  const removed = useWorkoutStore((s) => s.lastRemoved);
+  const now = useNow(500);
+  if (!removed || now - removed.at > 6000) return null;
+  return (
+    <div
+      role="status"
+      className="bg-foreground text-background fixed inset-x-4 bottom-36 z-40 mx-auto flex max-w-sm items-center gap-3 rounded-xl px-4 py-2 text-sm shadow-lg md:bottom-20"
+    >
+      <span className="flex-1">Set deleted</span>
+      <button
+        type="button"
+        className="font-semibold underline-offset-2 hover:underline"
+        onClick={() => useWorkoutStore.getState().undoRemove()}
+      >
+        Undo
+      </button>
     </div>
   );
 }

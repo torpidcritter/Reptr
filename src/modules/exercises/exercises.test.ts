@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, testDatabaseUrl } from "@/db/test/test-db";
 import { createCustomExercise, customExerciseSchema, DuplicateExerciseError } from "./custom";
-import { getExercise, listExercises } from "./queries";
+import { getExercise, listExercises, similarExercises } from "./queries";
 
 describe("custom exercise form", () => {
   const base = {
@@ -103,5 +103,20 @@ describe.skipIf(!testDatabaseUrl)("exercise library", () => {
       DuplicateExerciseError,
     );
     await expect(createCustomExercise(t.db, bob, input)).resolves.toHaveProperty("id");
+  });
+
+  it("suggests swaps that train the same muscles with the same movement", async () => {
+    const [bench] = await listExercises(t.db, alice, { q: "Barbell Bench Press" });
+    const similar = await similarExercises(t.db, alice, bench.id);
+    const names = similar.map((e) => e.name);
+    expect(names).not.toContain("Barbell Bench Press");
+    expect(names.slice(0, 4)).toContain("Dumbbell Bench Press");
+    expect(names).not.toContain("Barbell Back Squat");
+    const db = similar.find((e) => e.name === "Dumbbell Bench Press")!;
+    expect(db.reason).toBe("Same muscles · same movement · uses dumbbell");
+    // Another user's custom exercises are never suggested.
+    const [cable] = await listExercises(t.db, bob, { q: "cable y raise" });
+    const delts = await similarExercises(t.db, alice, cable.id);
+    expect(delts).toEqual([]);
   });
 });
