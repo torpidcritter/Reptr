@@ -64,6 +64,13 @@
       "when": 1793863954282,
       "tag": "0008_routine_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793864162350,
+      "tag": "0009_goals",
+      "breakpoints": true
     }
   ]
 }

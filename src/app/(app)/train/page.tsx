@@ -1,4 +1,4 @@
-import { CalendarDays, ChevronRight, Library, ListChecks, Play } from "lucide-react";
+import { CalendarDays, ChevronRight, Library, ListChecks, Play, Target } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ComponentType } from "react";
@@ -42,7 +42,7 @@ export default function Page() {
       <Link href="/workout" className={buttonVariants({ size: "lg", className: "mb-4 w-full" })}>
         <Play /> Start workout
       </Link>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2">
         <NavCard
           href="/routines"
           icon={ListChecks}
@@ -52,14 +52,20 @@ export default function Page() {
         <NavCard
           href="/history"
           icon={CalendarDays}
-          title="History"
-          body="Calendar and past workouts"
+          title="Calendar"
+          body="Your weekly plan and past workouts"
         />
         <NavCard
           href="/exercises"
           icon={Library}
           title="Exercise library"
           body="Browse, search and add your own"
+        />
+        <NavCard
+          href="/goals"
+          icon={Target}
+          title="Goals"
+          body="Targets for lifts, body weight and consistency"
         />
       </div>
     </>
