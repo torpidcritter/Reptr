@@ -2,7 +2,8 @@
 
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
-import { listExercises } from "@/modules/exercises/queries";
+import { z } from "zod";
+import { listExercises, similarExercises } from "@/modules/exercises/queries";
 
 export type PickerExercise = {
   id: string;
@@ -19,6 +20,22 @@ export async function searchExercises(q: string): Promise<PickerExercise[]> {
     id: e.id,
     name: e.name,
     measurement: e.measurement,
+    detail: [e.primaryMuscles.join(", "), e.equipment].filter(Boolean).join(" · "),
+  }));
+}
+
+/** Swaps for an exercise that keep its training intent, best first. */
+export async function similarExercisesAction(
+  exerciseId: string,
+): Promise<(PickerExercise & { reason: string })[]> {
+  const user = await requireUser();
+  const id = z.uuid().parse(exerciseId);
+  const rows = await similarExercises(db, user.id, id);
+  return rows.map((e) => ({
+    id: e.id,
+    name: e.name,
+    measurement: e.measurement,
+    reason: e.reason,
     detail: [e.primaryMuscles.join(", "), e.equipment].filter(Boolean).join(" · "),
   }));
 }

@@ -1,6 +1,17 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Link2, MoreVertical, Plus, Repeat, Timer, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CopyPlus,
+  Link2,
+  Link2Off,
+  MoreVertical,
+  Plus,
+  Repeat,
+  Timer,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,7 +43,8 @@ export function ExerciseCard({
   restAfterSet: boolean;
   onSwap: () => void;
 }) {
-  const { updateSet, addSet, removeSet, edit, startRest } = useWorkoutStore.getState();
+  const { updateSet, addSet, removeSet, edit, startRest, repeatLastSet } =
+    useWorkoutStore.getState();
   const [menu, setMenu] = useState(false);
   const f = fieldsFor(exercise.measurement);
   const prevWorking = previous?.sets.filter((s) => s.type !== "warmup") ?? [];
@@ -59,7 +71,37 @@ export function ExerciseCard({
       return;
     }
     updateSet(exercise.id, setId, { ...filled, completedAt: new Date().toISOString() });
+    navigator.vibrate?.(30);
     if (restAfterSet && set.type !== "warmup") startRest(rest);
+  }
+
+  function repeat() {
+    if (!repeatLastSet(exercise.id)) return;
+    navigator.vibrate?.(30);
+    if (restAfterSet) startRest(rest);
+  }
+
+  const canRepeat = exercise.sets.some((s) => s.completedAt);
+
+  /** Pairs this exercise with the next one, or takes it out of its superset. */
+  function toggleSuperset() {
+    edit((w) => {
+      const me = w.exercises[index];
+      if (me.supersetGroup != null) {
+        const g = me.supersetGroup;
+        me.supersetGroup = null;
+        const rest = w.exercises.filter((e) => e.supersetGroup === g);
+        if (rest.length === 1) rest[0].supersetGroup = null;
+        return;
+      }
+      const next = w.exercises[index + 1];
+      if (!next) return;
+      const g =
+        next.supersetGroup ?? Math.max(0, ...w.exercises.map((e) => e.supersetGroup ?? 0)) + 1;
+      me.supersetGroup = g;
+      next.supersetGroup = g;
+    });
+    setMenu(false);
   }
 
   const headers = [
@@ -167,6 +209,23 @@ export function ExerciseCard({
           <Button
             variant="ghost"
             size="sm"
+            className="col-span-2"
+            disabled={exercise.supersetGroup == null && index === count - 1}
+            onClick={toggleSuperset}
+          >
+            {exercise.supersetGroup != null ? (
+              <>
+                <Link2Off /> Take out of superset
+              </>
+            ) : (
+              <>
+                <Link2 /> Superset with next exercise
+              </>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             className="text-danger col-span-2"
             onClick={() => {
               if (
@@ -213,9 +272,16 @@ export function ExerciseCard({
         ))}
       </div>
 
-      <Button variant="ghost" size="sm" className="mt-1 w-full" onClick={() => addSet(exercise.id)}>
-        <Plus /> Add set
-      </Button>
+      <div className="mt-1 flex gap-1">
+        <Button variant="ghost" size="sm" className="flex-1" onClick={() => addSet(exercise.id)}>
+          <Plus /> Add set
+        </Button>
+        {canRepeat && (
+          <Button variant="ghost" size="sm" className="flex-1" onClick={repeat}>
+            <CopyPlus /> Repeat last set
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

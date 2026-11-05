@@ -4,28 +4,49 @@ import { Plus, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { searchExercises, type PickerExercise } from "./actions";
+import { searchExercises, similarExercisesAction, type PickerExercise } from "./actions";
 
 /** A full-height sheet for finding an exercise. Calls onPick and stays open so several can be added. */
 export function ExercisePicker({
   open,
   onClose,
   onPick,
+  similarTo,
 }: {
   open: boolean;
   onClose: () => void;
   onPick: (exercise: PickerExercise) => void;
+  /** When swapping, list alternatives for this exercise above the search results. */
+  similarTo?: { id: string; name: string };
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<PickerExercise[]>([]);
   const [added, setAdded] = useState<string[]>([]);
+  const [found, setFound] = useState<{
+    id: string;
+    items: (PickerExercise & { reason: string })[];
+  } | null>(null);
+  const similarId = similarTo?.id;
+  const similar = found && found.id === similarId ? found.items : [];
+
+  useEffect(() => {
+    if (!open || !similarId) return;
+    let cancelled = false;
+    similarExercisesAction(similarId)
+      .then((items) => !cancelled && setFound({ id: similarId, items }))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, similarId]);
 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) {
       setAdded([]);
+      setQ("");
       d.showModal();
     }
     if (!open && d.open) d.close();
@@ -68,30 +89,59 @@ export function ExercisePicker({
             <X />
           </Button>
         </div>
-        <ul className="flex-1 divide-y overflow-y-auto">
-          {results.map((e) => (
-            <li key={e.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onPick(e);
-                  setAdded((a) => [...a, e.id]);
-                }}
-                className="hover:bg-muted flex w-full items-center gap-3 px-4 py-3 text-left"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{e.name}</p>
-                  <p className="text-muted-foreground truncate text-sm">{e.detail}</p>
-                </div>
-                {added.includes(e.id) ? (
-                  <span className="text-accent text-xs font-medium">Added</span>
-                ) : (
-                  <Plus className="text-muted-foreground size-4" />
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="flex-1 overflow-y-auto">
+          {similarTo && similar.length > 0 && q.trim() === "" && (
+            <section aria-label={`Alternatives to ${similarTo.name}`} className="border-b">
+              <h2 className="text-muted-foreground px-4 pt-3 pb-1 text-xs font-semibold uppercase">
+                Similar to {similarTo.name}
+              </h2>
+              <ul className="divide-y">
+                {similar.map((e) => (
+                  <li key={e.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(e)}
+                      className="hover:bg-muted flex w-full items-center gap-3 px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{e.name}</p>
+                        <p className="text-muted-foreground truncate text-sm">{e.reason}</p>
+                      </div>
+                      <Plus className="text-muted-foreground size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <h2 className="text-muted-foreground px-4 pt-3 pb-1 text-xs font-semibold uppercase">
+                All exercises
+              </h2>
+            </section>
+          )}
+          <ul className="divide-y">
+            {results.map((e) => (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(e);
+                    setAdded((a) => [...a, e.id]);
+                  }}
+                  className="hover:bg-muted flex w-full items-center gap-3 px-4 py-3 text-left"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{e.name}</p>
+                    <p className="text-muted-foreground truncate text-sm">{e.detail}</p>
+                  </div>
+                  {added.includes(e.id) ? (
+                    <span className="text-accent text-xs font-medium">Added</span>
+                  ) : (
+                    <Plus className="text-muted-foreground size-4" />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
         <div className="border-t p-3">
           <Button className="w-full" onClick={onClose}>
             Done{added.length > 0 && ` (${added.length} added)`}

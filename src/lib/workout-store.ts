@@ -23,6 +23,7 @@ const idbStorage: StateStorage = {
 
 export type RestTimer = { endsAt: number; duration: number } | null;
 export type SyncState = "saved" | "saving" | "offline" | "error";
+export type RemovedSet = { exerciseKey: string; set: SetSnapshot; index: number; at: number };
 
 type State = {
   workout: WorkoutSnapshot | null;
@@ -32,6 +33,8 @@ type State = {
   sync: SyncState;
   rest: RestTimer;
   hydrated: boolean;
+  /** The last deleted set, kept briefly so it can be undone. Not persisted. */
+  lastRemoved: RemovedSet | null;
 };
 
 type Actions = {
@@ -41,6 +44,9 @@ type Actions = {
   updateSet: (exerciseKey: string, setId: string, patch: Partial<SetSnapshot>) => void;
   addSet: (exerciseKey: string) => void;
   removeSet: (exerciseKey: string, setId: string) => void;
+  undoRemove: () => void;
+  /** Logs another set like the last one in a single tap. Returns false if there's nothing to copy. */
+  repeatLastSet: (exerciseKey: string) => boolean;
   startRest: (seconds: number) => void;
   adjustRest: (bySeconds: number) => void;
   stopRest: () => void;
@@ -59,6 +65,7 @@ export const useWorkoutStore = create<State & Actions>()(
       sync: "saved",
       rest: null,
       hydrated: false,
+      lastRemoved: null,
 
       start: (w) => setState((s) => ({ workout: w, revision: s.revision + 1, rest: null })),
       clear: () =>
@@ -93,11 +100,49 @@ export const useWorkoutStore = create<State & Actions>()(
           );
         }),
 
-      removeSet: (exerciseKey, setId) =>
+      removeSet: (exerciseKey, setId) => {
+        const e = getState().workout?.exercises.find((x) => x.id === exerciseKey);
+        const index = e?.sets.findIndex((s) => s.id === setId) ?? -1;
+        if (!e || index < 0) return;
+        const set = e.sets[index];
         getState().edit((w) => {
-          const e = w.exercises.find((x) => x.id === exerciseKey);
-          if (e) e.sets = e.sets.filter((s) => s.id !== setId);
-        }),
+          const x = w.exercises.find((y) => y.id === exerciseKey)!;
+          x.sets = x.sets.filter((s) => s.id !== setId);
+        });
+        setState({ lastRemoved: { exerciseKey, set: clone(set), index, at: Date.now() } });
+      },
+
+      undoRemove: () => {
+        const r = getState().lastRemoved;
+        if (!r) return;
+        setState({ lastRemoved: null });
+        getState().edit((w) => {
+          const e = w.exercises.find((x) => x.id === r.exerciseKey);
+          if (e && !e.sets.some((s) => s.id === r.set.id)) {
+            e.sets.splice(Math.min(r.index, e.sets.length), 0, r.set);
+          }
+        });
+      },
+
+      repeatLastSet: (exerciseKey) => {
+        const e = getState().workout?.exercises.find((x) => x.id === exerciseKey);
+        const done = e?.sets.filter((s) => s.completedAt);
+        const last = done?.[done.length - 1];
+        if (!e || !last) return false;
+        getState().edit((w) => {
+          const x = w.exercises.find((y) => y.id === exerciseKey)!;
+          const copy = {
+            ...emptySet(crypto.randomUUID(), last),
+            type: last.type === "warmup" ? ("working" as const) : last.type,
+            completedAt: new Date().toISOString(),
+          };
+          // Use up the next planned set if there is one, otherwise add a set.
+          const open = x.sets.findIndex((s) => !s.completedAt);
+          if (open >= 0) x.sets[open] = { ...copy, id: x.sets[open].id };
+          else x.sets.push(copy);
+        });
+        return true;
+      },
 
       startRest: (seconds) =>
         setState({
