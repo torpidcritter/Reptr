@@ -59,6 +59,7 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
     }
 
     const row = {
+      plannedSets: w.exercises.reduce((n, e) => n + e.sets.length, 0),
       name: w.name,
       routineId: w.routineId,
       status: w.status,
@@ -131,7 +132,7 @@ export async function getWorkout(db: Database, userId: string, id: string) {
     .select()
     .from(workouts)
     .where(and(eq(workouts.id, id), eq(workouts.userId, userId)));
-  return w ? loadSnapshot(db, w) : null;
+  return w ? { ...(await loadSnapshot(db, w)), plannedSets: w.plannedSets } : null;
 }
 
 async function loadSnapshot(

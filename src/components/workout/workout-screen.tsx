@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { UnitSystem } from "@/lib/units";
 import { useWorkoutStore } from "@/lib/workout-store";
+import { estimateRemainingSeconds } from "@/modules/workouts/estimate";
 import { summarize } from "@/modules/workouts/snapshot";
 import { emptyWorkout, exerciseFor } from "@/modules/workouts/start";
 import type { PreviousPerformance } from "@/modules/workouts/workouts";
@@ -169,6 +170,7 @@ function Logger({ settings }: { settings: Settings }) {
 
   const elapsed = (now - Date.parse(workout.startedAt)) / 1000;
   const stats = summarize(workout);
+  const left = estimateRemainingSeconds(workout, settings.defaultRestSeconds);
 
   function finish() {
     const unfinished = workout.exercises
@@ -218,7 +220,13 @@ function Logger({ settings }: { settings: Settings }) {
             className="h-auto border-0 bg-transparent p-0 text-lg font-semibold focus-visible:ring-0"
           />
           <p className="text-muted-foreground flex items-center gap-2 text-xs tabular-nums">
-            {formatClock(elapsed)} · {stats.sets} sets <SyncBadge />
+            {formatClock(elapsed)} · {stats.sets} sets
+            {left != null && (
+              <span title="Estimated from your pace and planned rest">
+                · ~{Math.max(1, Math.round(left / 60))} min left
+              </span>
+            )}{" "}
+            <SyncBadge />
           </p>
         </div>
         <Button onClick={finish}>Finish</Button>

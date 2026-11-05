@@ -11,6 +11,7 @@ import { formatDate, formatDuration, formatVolume } from "@/lib/format";
 import { displayWeight, weightUnitLabel } from "@/lib/units";
 import { recordLabels } from "@/modules/analytics/calc";
 import { recordsForWorkout } from "@/modules/analytics/records";
+import { adherence } from "@/modules/workouts/estimate";
 import { summarize } from "@/modules/workouts/snapshot";
 import { getWorkout } from "@/modules/workouts/workouts";
 import { PendingWorkout } from "./pending";
@@ -34,6 +35,7 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
 
   const units = profile?.unitSystem ?? "metric";
   const stats = summarize(w);
+  const plan = adherence(stats.sets, w.plannedSets);
   const start = new Date(w.startedAt);
   const duration = w.finishedAt ? Date.parse(w.finishedAt) - start.getTime() : 0;
 
@@ -62,6 +64,11 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
         <Card>
           <CardLabel>Sets</CardLabel>
           <CardValue>{stats.sets}</CardValue>
+          {plan && plan.planned !== plan.done && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              of {plan.planned} planned ({plan.percent}%)
+            </p>
+          )}
         </Card>
         <Card>
           <CardLabel>Volume</CardLabel>

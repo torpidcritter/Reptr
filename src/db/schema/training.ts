@@ -83,6 +83,8 @@ export const workouts = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     pausedSeconds: integer("paused_seconds").notNull().default(0),
+    /** How many sets were on the plan when it was saved, done or not (unfinished ones aren't kept). */
+    plannedSets: integer("planned_sets"),
     notes: text("notes"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
