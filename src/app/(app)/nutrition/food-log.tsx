@@ -4,7 +4,8 @@ import { Droplet, Plus, Trash2, Undo2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { addFoodAction, addWaterAction, deleteFoodAction } from "./actions";
+import { addFoodAction, addWaterAction, deleteFoodAction, saveFoodAction } from "./actions";
+import { MyFoods, type SavedFood } from "./my-foods";
 
 const meals = [
   { value: "breakfast", label: "Breakfast" },
@@ -36,7 +37,9 @@ export function FoodLog({
   recent,
   waterMl,
   defaultMeal,
+  saved,
 }: {
+  saved: SavedFood[];
   defaultMeal: Meal;
   day: string;
   foods: Food[];
@@ -47,6 +50,7 @@ export function FoodLog({
   const [meal, setMeal] = useState<Meal>(defaultMeal);
   const [form, setForm] = useState({ name: "", calories: "", proteinG: "", carbsG: "", fatG: "" });
   const [error, setError] = useState<string | null>(null);
+  const [keep, setKeep] = useState(false);
 
   const add = (f: RecentFood) =>
     start(async () => {
@@ -67,7 +71,9 @@ export function FoodLog({
     start(async () => {
       const res = await addFoodAction({ ...entry, day });
       if (res.error) return setError(res.error);
-      setError(null);
+      const kept = keep ? await saveFoodAction(entry) : {};
+      setError(kept.error ? `Logged, but not saved to your foods: ${kept.error}` : null);
+      setKeep(false);
       setForm({ name: "", calories: "", proteinG: "", carbsG: "", fatG: "" });
     });
   };
@@ -121,13 +127,24 @@ export function FoodLog({
           {macro("carbsG", "Carbs")}
           {macro("fatG", "Fat")}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={pending || !form.name.trim()}>
             <Plus /> Add
           </Button>
+          <label className="text-muted-foreground flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={keep}
+              onChange={(e) => setKeep(e.target.checked)}
+              className="accent-accent size-4"
+            />
+            Save to my foods
+          </label>
           {error && <p className="text-danger text-sm">{error}</p>}
         </div>
       </form>
+
+      <MyFoods foods={saved} day={day} meal={meal} />
 
       {recent.length > 0 && (
         <div>
