@@ -22,13 +22,22 @@ export type BuilderItem = {
   linkNext: boolean;
 };
 
-type Initial = { id: string | null; name: string; notes: string | null; items: BuilderItem[] };
+type Initial = {
+  id: string | null;
+  name: string;
+  notes: string | null;
+  scheduleDays: number[];
+  items: BuilderItem[];
+};
+
+const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const num = (v: string) => (v === "" ? null : Number(v));
 
 export function RoutineBuilder({ initial }: { initial: Initial }) {
   const [name, setName] = useState(initial.name);
   const [items, setItems] = useState(initial.items);
+  const [days, setDays] = useState<number[]>(initial.scheduleDays);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -50,6 +59,7 @@ export function RoutineBuilder({ initial }: { initial: Initial }) {
       const res = await saveRoutineAction(initial.id, {
         name,
         notes: initial.notes,
+        scheduleDays: days,
         items: items.map((x, i) => ({
           exerciseId: x.exerciseId,
           targetSets: x.targetSets,
@@ -74,6 +84,34 @@ export function RoutineBuilder({ initial }: { initial: Initial }) {
           maxLength={60}
         />
       </label>
+
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="mb-1.5 text-sm font-medium">Planned days</legend>
+        <div className="flex flex-wrap gap-1.5">
+          {weekdays.map((d, i) => {
+            const on = days.includes(i);
+            return (
+              <button
+                key={d}
+                type="button"
+                aria-pressed={on}
+                onClick={() =>
+                  setDays((xs) => (on ? xs.filter((x) => x !== i) : [...xs, i].sort()))
+                }
+                className={cn(
+                  "h-10 min-w-12 rounded-lg border px-3 text-sm font-medium transition-colors",
+                  on ? "bg-accent text-accent-foreground border-accent" : "hover:bg-muted",
+                )}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+        <span className="text-muted-foreground text-xs">
+          Shows on your calendar and home screen on these days. Leave empty to train it whenever.
+        </span>
+      </fieldset>
 
       <ol className="flex flex-col gap-2">
         {items.map((item, i) => {

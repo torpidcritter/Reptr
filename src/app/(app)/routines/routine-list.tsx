@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
+import { weekdayNames } from "@/modules/history/schedule";
 import { listRoutines } from "@/modules/routines/routines";
 import { RoutineMenu } from "./routine-menu";
 
@@ -28,7 +29,11 @@ export async function RoutineList() {
         <Card key={r.id} className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="font-semibold">{r.name}</p>
-            <p className="text-muted-foreground text-xs">{r.exerciseCount} exercises</p>
+            <p className="text-muted-foreground text-xs">
+              {r.exerciseCount} exercises
+              {r.scheduleDays.length > 0 &&
+                ` · ${r.scheduleDays.map((d) => weekdayNames[d]).join(", ")}`}
+            </p>
             <p className="text-muted-foreground mt-2 line-clamp-2 text-sm">
               {r.exerciseNames.join(", ")}
             </p>

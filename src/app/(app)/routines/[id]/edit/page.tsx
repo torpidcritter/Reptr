@@ -28,7 +28,15 @@ async function Editor({ params }: Pick<PageProps<"/routines/[id]/edit">, "params
   }));
 
   return (
-    <RoutineBuilder initial={{ id: routine.id, name: routine.name, notes: routine.notes, items }} />
+    <RoutineBuilder
+      initial={{
+        id: routine.id,
+        name: routine.name,
+        notes: routine.notes,
+        scheduleDays: routine.scheduleDays,
+        items,
+      }}
+    />
   );
 }
 

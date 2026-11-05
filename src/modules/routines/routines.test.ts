@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase, testDatabaseUrl } from "@/db/test/test-db";
 import { createCustomExercise, customExerciseSchema } from "@/modules/exercises/custom";
+import { nextRoutine } from "@/modules/dashboard/dashboard";
 import {
   archiveRoutine,
   duplicateRoutine,
@@ -108,9 +109,36 @@ describe.skipIf(!testDatabaseUrl)("routines", () => {
 
     const list = await listRoutines(t.db, alice);
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ name: "Push", exerciseCount: 4 });
+    expect(list[0]).toMatchObject({ name: "Push", exerciseCount: 4, scheduleDays: [] });
     expect(await listRoutines(t.db, bob)).toEqual([]);
     expect(await getRoutine(t.db, bob, id)).toBeNull();
+  });
+
+  it("schedules a routine on weekdays and suggests it on those days", async () => {
+    const legs = routineSchema.parse({
+      name: "Legs",
+      scheduleDays: [4, 0, 4],
+      items: [{ exerciseId: ex["barbell-back-squat"] }],
+    });
+    expect(legs.scheduleDays).toEqual([0, 4]);
+    expect(routineSchema.safeParse({ ...legs, scheduleDays: [7] }).success).toBe(false);
+    const { id } = await saveRoutine(t.db, alice, legs);
+    expect((await getRoutine(t.db, alice, id))!.scheduleDays).toEqual([0, 4]);
+    const setAt = async () =>
+      (await listRoutines(t.db, alice)).find((r) => r.id === id)!.scheduleSetAt!.getTime();
+    const first = await setAt();
+    await saveRoutine(t.db, alice, { ...legs, name: "Legs A" }, id);
+    expect(await setAt()).toBe(first); // a rename keeps the plan's start date
+    await saveRoutine(t.db, alice, { ...legs, scheduleDays: [0, 3] }, id);
+    expect(await setAt()).toBeGreaterThan(first);
+
+    expect((await nextRoutine(t.db, alice, 4))!.name).toBe("Legs"); // Friday
+    expect((await nextRoutine(t.db, alice, 2))!.plannedToday).toBe(false);
+
+    const { id: copy } = await duplicateRoutine(t.db, alice, id);
+    expect((await getRoutine(t.db, alice, copy))!.scheduleDays).toEqual([]);
+    await archiveRoutine(t.db, alice, id);
+    await archiveRoutine(t.db, alice, copy);
   });
 
   it("reorders and edits by replacing the contents", async () => {
