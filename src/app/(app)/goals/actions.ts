@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { toStoredWeight } from "@/lib/units";
 import { archiveGoal, createGoal, GoalExerciseError, goalSchema } from "@/modules/goals/goals";
@@ -13,6 +14,8 @@ export async function createGoalAction(payload: {
   targetDate?: string;
 }): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const [profile, tz] = await Promise.all([getProfile(user.id), getTimeZone()]);
   const units = profile?.unitSystem ?? "metric";
   const raw = Number(String(payload.target).replace(",", "."));

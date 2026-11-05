@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
 import { requireUser } from "@/lib/auth";
 import {
   addFood,
@@ -30,6 +31,8 @@ const done = () => {
 
 export async function addFoodAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = foodSchema.safeParse(payload);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   await addFood(db, user.id, parsed.data);
@@ -52,6 +55,8 @@ export async function addWaterAction(day: string, ml: number) {
 
 export async function saveTargetsAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = targetsSchema.safeParse(payload);
   if (!parsed.success)
     return { error: "Check the targets: calories 500–10,000, water 250–10,000 ml." };
@@ -73,6 +78,8 @@ async function saving(fn: () => Promise<unknown>): Promise<{ error?: string }> {
 
 export async function saveFoodAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = savedFoodSchema.safeParse(payload);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   return saving(() => saveFood(db, user.id, parsed.data));
@@ -80,6 +87,8 @@ export async function saveFoodAction(payload: unknown): Promise<{ error?: string
 
 export async function saveRecipeAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = recipeSchema.safeParse(payload);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   return saving(() => saveRecipe(db, user.id, parsed.data));
@@ -102,6 +111,8 @@ const logSchema = z.object({
 /** Logs servings of a saved food or recipe, with macros scaled on the server. */
 export async function logSavedFoodAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const p = logSchema.safeParse(payload);
   if (!p.success) return { error: "Servings must be between 0.1 and 20." };
   const food = await getSavedFood(db, user.id, p.data.id);

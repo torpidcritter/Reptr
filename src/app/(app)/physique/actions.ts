@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
 import { requireUser } from "@/lib/auth";
 import { removeFiles } from "@/lib/supabase/storage";
 import {
@@ -16,6 +17,8 @@ import {
 
 export async function logEntryAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = entrySchema.safeParse(payload);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   await logEntry(db, user.id, parsed.data);
@@ -32,6 +35,8 @@ export async function deleteMetricAction(id: string) {
 
 export async function addPhotoAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "photo");
+  if (busy) return { error: busy };
   const parsed = photoSchema.safeParse(payload);
   if (!parsed.success) return { error: "That photo couldn't be saved." };
   await addPhoto(db, user.id, parsed.data);
