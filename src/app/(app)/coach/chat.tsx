@@ -71,7 +71,10 @@ function Formatted({ text }: { text: string }) {
 
 export function CoachChat({ enabled }: { enabled: boolean }) {
   const [messages, setMessages] = useState<Message[]>(load);
-  const [input, setInput] = useState("");
+  // A link elsewhere in the app can start a question here with ?ask=.
+  const [input, setInput] = useState(
+    () => new URLSearchParams(window.location.search).get("ask")?.slice(0, 500) ?? "",
+  );
   const [pending, start] = useTransition();
   const end = useRef<HTMLDivElement>(null);
 
