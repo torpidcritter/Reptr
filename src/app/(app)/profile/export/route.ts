@@ -1,4 +1,5 @@
 import { db } from "@/db";
+import { audit } from "@/modules/ops/audit";
 import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
 import { exportAll, setRows, toCsv } from "@/modules/export/export";
@@ -9,6 +10,7 @@ export async function GET(request: Request) {
   const busy = await overLimit(user.id, "export");
   if (busy) return new Response(busy, { status: 429, headers: { "Retry-After": "600" } });
   const format = new URL(request.url).searchParams.get("format") === "csv" ? "csv" : "json";
+  await audit(db, user.id, "data_exported", { format });
   const stamp = new Date().toISOString().slice(0, 10);
   const headers = { "Cache-Control": "no-store" };
 

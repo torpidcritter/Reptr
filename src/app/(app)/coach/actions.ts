@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
+import { audit } from "@/modules/ops/audit";
 import { overLimit } from "@/lib/guard";
 import { log } from "@/lib/log";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
@@ -112,6 +113,7 @@ export async function confirmProposalAction(
   if (busy) return { error: busy };
   const p = proposalSchema.safeParse(proposal);
   if (!p.success) return { error: "That change couldn't be read." };
+  await audit(db, user.id, "coach_change", { kind: p.data.kind });
   try {
     if (p.data.kind === "create_routine") {
       const routine = routineSchema.parse({
@@ -174,5 +176,6 @@ export async function deleteMemoryAction(id: string) {
   const user = await requireUser();
   if (!z.uuid().safeParse(id).success) return;
   await deleteMemory(db, user.id, id);
+  await audit(db, user.id, "memory_deleted");
   revalidatePath("/coach");
 }
