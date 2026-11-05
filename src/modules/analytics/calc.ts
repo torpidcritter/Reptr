@@ -112,3 +112,20 @@ export function round(n: number, digits = 0) {
   const f = 10 ** digits;
   return Math.round(n * f) / f;
 }
+
+/**
+ * The same set through the common 1RM formulas, to show how much estimates vary.
+ * Reptr uses Epley everywhere so its numbers stay comparable over time.
+ */
+export function e1rmFormulas(weightKg: number, reps: number) {
+  if (weightKg <= 0 || reps < 2 || reps > 12) return [];
+  const w = weightKg;
+  const r = reps;
+  return [
+    { name: "Epley", value: w * (1 + r / 30) },
+    { name: "Brzycki", value: (w * 36) / (37 - r) },
+    { name: "Lombardi", value: w * r ** 0.1 },
+    { name: "Mayhew", value: (100 * w) / (52.2 + 41.9 * Math.exp(-0.055 * r)) },
+    { name: "Wathan", value: (100 * w) / (48.8 + 53.8 * Math.exp(-0.075 * r)) },
+  ].map((f) => ({ ...f, value: round(f.value, 1) }));
+}
