@@ -9,7 +9,8 @@ Requires Node 22 and pnpm.
 ```bash
 pnpm install
 pnpm dev          # http://localhost:3000
-pnpm test         # unit tests (Vitest)
+pnpm test         # unit tests (Vitest); DB tests need TEST_DATABASE_URL
+pnpm e2e          # end-to-end journeys (Playwright), also needs TEST_DATABASE_URL
 pnpm lint && pnpm typecheck && pnpm format:check
 ```
 
