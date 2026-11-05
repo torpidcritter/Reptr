@@ -22,23 +22,32 @@ import { sessionReviewFor, workoutOnOrBefore } from "./review-queries";
 
 export type CoachContext = { db: Database; userId: string; timeZone: string; now: Date };
 
+type RoutineItem = {
+  exerciseId: string;
+  exercise: string;
+  targetSets: number;
+  targetRepsMin: number;
+  targetRepsMax: number;
+  restSeconds: number | null;
+};
+
 export type Proposal =
   | {
       kind: "create_routine";
       summary: string;
-      payload: {
-        name: string;
-        items: {
-          exerciseId: string;
-          exercise: string;
-          targetSets: number;
-          targetRepsMin: number;
-          targetRepsMax: number;
-          restSeconds: number | null;
-        }[];
-      };
+      payload: { name: string; items: RoutineItem[] };
     }
   | { kind: "log_weight"; summary: string; payload: { day: string; weightKg: number } }
+  | {
+      kind: "create_program";
+      summary: string;
+      payload: {
+        name: string;
+        weeks: number;
+        deloadEvery: number | null;
+        routines: { name: string; scheduleDays: number[]; items: RoutineItem[] }[];
+      };
+    }
   | {
       kind: "remember";
       summary: string;
@@ -63,6 +72,48 @@ async function findExercise(ctx: CoachContext, name: string) {
   const exact = rows.find((r) => r.name.toLowerCase() === name.trim().toLowerCase());
   return exact ?? rows[0] ?? null;
 }
+
+const exerciseListSchema = z
+  .array(
+    z.object({
+      exercise: z.string().min(2),
+      sets: z.number().int().min(1).max(10),
+      repsMin: z.number().int().min(1).max(50),
+      repsMax: z.number().int().min(1).max(50),
+      restSeconds: z.number().int().min(0).max(600).optional(),
+    }),
+  )
+  .min(1)
+  .max(12);
+
+/** Matches exercise names to the library, or explains which one wasn't found. */
+async function resolveItems(
+  ctx: CoachContext,
+  exercises: z.infer<typeof exerciseListSchema>,
+): Promise<RoutineItem[] | { error: string }> {
+  const items: RoutineItem[] = [];
+  for (const e of exercises) {
+    const ex = await findExercise(ctx, e.exercise);
+    if (!ex)
+      return { error: `No exercise matching "${e.exercise}". Search with find_exercises first.` };
+    items.push({
+      exerciseId: ex.id,
+      exercise: ex.name,
+      targetSets: e.sets,
+      targetRepsMin: Math.min(e.repsMin, e.repsMax),
+      targetRepsMax: Math.max(e.repsMin, e.repsMax),
+      restSeconds: e.restSeconds ?? null,
+    });
+  }
+  return items;
+}
+
+const describeItems = (items: RoutineItem[]) =>
+  items
+    .map((i) => `${i.exercise} ${i.targetSets}×${i.targetRepsMin}–${i.targetRepsMax}`)
+    .join(", ");
+
+const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 const tool = <S extends z.ZodType>(t: {
   description: string;
@@ -272,42 +323,67 @@ export const tools: Record<string, Tool> = {
     description:
       "Propose a new routine. Nothing is saved until the user confirms it in the app. Use exercise names from find_exercises.",
     proposes: true,
+    parameters: z.object({ name: z.string().min(1).max(60), exercises: exerciseListSchema }),
+    run: async (ctx, { name, exercises }): Promise<Proposal | { error: string }> => {
+      const items = await resolveItems(ctx, exercises);
+      if ("error" in items) return items;
+      return {
+        kind: "create_routine",
+        summary: `Create routine "${name}": ${describeItems(items)}`,
+        payload: { name, items },
+      };
+    },
+  }),
+
+  propose_program: tool({
+    description:
+      "Propose a whole program from the user's description: several routines, the weekdays each one is on, and a training block of N weeks with an optional deload every few weeks. It starts this week. Nothing is saved until the user confirms. Use exercise names from find_exercises and respect what you know about their injuries and equipment.",
+    proposes: true,
     parameters: z.object({
-      name: z.string().min(1).max(60),
-      exercises: z
+      name: z.string().min(1).max(80),
+      weeks: z.number().int().min(2).max(16),
+      deloadEvery: z.number().int().min(3).max(8).nullable().optional(),
+      routines: z
         .array(
           z.object({
-            exercise: z.string().min(2),
-            sets: z.number().int().min(1).max(10),
-            repsMin: z.number().int().min(1).max(50),
-            repsMax: z.number().int().min(1).max(50),
-            restSeconds: z.number().int().min(0).max(600).optional(),
+            name: z.string().min(1).max(60),
+            days: z.array(z.enum(weekdays)).min(1).max(7),
+            exercises: exerciseListSchema,
           }),
         )
         .min(1)
-        .max(12),
+        .max(7),
     }),
-    run: async (ctx, { name, exercises }): Promise<Proposal | { error: string }> => {
-      const items = [];
-      for (const e of exercises) {
-        const ex = await findExercise(ctx, e.exercise);
-        if (!ex)
-          return {
-            error: `No exercise matching "${e.exercise}". Search with find_exercises first.`,
-          };
-        items.push({
-          exerciseId: ex.id,
-          exercise: ex.name,
-          targetSets: e.sets,
-          targetRepsMin: Math.min(e.repsMin, e.repsMax),
-          targetRepsMax: Math.max(e.repsMin, e.repsMax),
-          restSeconds: e.restSeconds ?? null,
-        });
+    run: async (
+      ctx,
+      { name, weeks, deloadEvery, routines },
+    ): Promise<Proposal | { error: string }> => {
+      const taken = new Map<number, string>();
+      const out = [];
+      for (const r of routines) {
+        const scheduleDays = [...new Set(r.days.map((d) => weekdays.indexOf(d)))].sort();
+        for (const d of scheduleDays) {
+          if (taken.has(d))
+            return {
+              error: `${weekdays[d]} has both "${taken.get(d)}" and "${r.name}". Give each day one routine.`,
+            };
+          taken.set(d, r.name);
+        }
+        const items = await resolveItems(ctx, r.exercises);
+        if ("error" in items) return items;
+        out.push({ name: r.name, scheduleDays, items });
       }
+      const summary = [
+        `Start "${name}": ${weeks} weeks${deloadEvery ? `, deload every ${deloadEvery} weeks` : ", no planned deload"}, from this week.`,
+        ...out.map(
+          (r) =>
+            `${r.scheduleDays.map((d) => weekdays[d]).join(", ")}: ${r.name} (${describeItems(r.items)})`,
+        ),
+      ].join("\n");
       return {
-        kind: "create_routine",
-        summary: `Create routine "${name}": ${items.map((i) => `${i.exercise} ${i.targetSets}×${i.targetRepsMin}–${i.targetRepsMax}`).join(", ")}`,
-        payload: { name, items },
+        kind: "create_program",
+        summary,
+        payload: { name, weeks, deloadEvery: deloadEvery ?? null, routines: out },
       };
     },
   }),

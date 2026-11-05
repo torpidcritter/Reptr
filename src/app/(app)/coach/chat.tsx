@@ -172,7 +172,7 @@ export function CoachChat({ enabled }: { enabled: boolean }) {
               m.proposals?.map((p, pi) => (
                 <div key={pi} className="bg-card border-border mt-3 rounded-xl border p-3">
                   <p className="text-xs font-medium tracking-wide uppercase">Needs your OK</p>
-                  <p className="mt-1">{p.summary}</p>
+                  <p className="mt-1 whitespace-pre-line">{p.summary}</p>
                   {p.state ? (
                     <p className="text-muted-foreground mt-2 text-xs">
                       {p.note ?? (p.state === "dismissed" ? "Dismissed." : "Done.")}
