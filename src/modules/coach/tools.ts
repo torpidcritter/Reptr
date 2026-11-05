@@ -13,6 +13,7 @@ import { dailyReadings, trendLine, weeklyRate } from "@/modules/body/trend";
 import { listExercises } from "@/modules/exercises/queries";
 import { listWorkoutHistory } from "@/modules/history/history";
 import { dailyTotals, getTargets } from "@/modules/nutrition/nutrition";
+import { nutritionReportFor } from "@/modules/nutrition/report-queries";
 import { baselineFrom, loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, volumeBetween } from "@/modules/recovery/recovery";
 import { listRoutines } from "@/modules/routines/routines";
@@ -225,12 +226,14 @@ export const tools: Record<string, Tool> = {
   }),
 
   nutrition_summary: tool({
-    description: "Daily calories and protein for the last N days against the user's targets.",
+    description:
+      "Daily calories and protein for the last N days against the user's targets, this week's averages, calories burned by training and steps, and a maintenance-calorie estimate learned from intake and the weight trend (with confidence).",
     parameters: z.object({ days: z.number().int().min(1).max(60).default(7) }),
     run: async (ctx, { days }) => {
-      const [targets, totals] = await Promise.all([
+      const [targets, totals, report] = await Promise.all([
         getTargets(ctx.db, ctx.userId),
         dailyTotals(ctx.db, ctx.userId, daysAgo(ctx, days - 1), daysAgo(ctx, 0)),
+        nutritionReportFor(ctx.db, ctx.userId, ctx.timeZone, ctx.now),
       ]);
       return {
         targets: targets && {
@@ -240,6 +243,9 @@ export const tools: Record<string, Tool> = {
         },
         daysLogged: totals.length,
         days: totals.map((t) => ({ day: t.day, calories: t.calories, proteinG: r1(t.proteinG) })),
+        last7Days: report.week,
+        burnedLast7Days: report.burn,
+        maintenanceEstimate: report.tdee,
       };
     },
   }),
