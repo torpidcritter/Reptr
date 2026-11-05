@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { authenticatedRole, authUsers } from "drizzle-orm/supabase";
 import { createdAt, id, isOwner, readOnlyPolicy, updatedAt } from "./helpers";
-import { bodyRegion, exerciseCategory, measurementType, muscleRole } from "./enums";
+import { bodyRegion, difficulty, exerciseCategory, measurementType, muscleRole } from "./enums";
 
 export const muscleGroups = pgTable(
   "muscle_groups",
@@ -53,6 +53,11 @@ export const exercises = pgTable(
     isUnilateral: boolean("is_unilateral").notNull().default(false),
     instructions: text("instructions"),
     formCues: text("form_cues"),
+    /** One per line. */
+    commonMistakes: text("common_mistakes"),
+    /** One per line. General guidance, not medical advice. */
+    safetyNotes: text("safety_notes"),
+    difficulty: difficulty("difficulty"),
     isArchived: boolean("is_archived").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

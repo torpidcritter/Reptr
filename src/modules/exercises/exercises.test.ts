@@ -119,4 +119,18 @@ describe.skipIf(!testDatabaseUrl)("exercise library", () => {
     const delts = await similarExercises(t.db, alice, cable.id);
     expect(delts).toEqual([]);
   });
+
+  it("gives every built-in exercise coaching notes and a difficulty", async () => {
+    const [squat] = await listExercises(t.db, alice, { q: "Barbell Back Squat" });
+    const detail = (await getExercise(t.db, alice, squat.id))!;
+    expect(detail.difficulty).toBe("intermediate");
+    expect(detail.formCues).toMatch(/brace/i);
+    expect(detail.commonMistakes!.split("\n").length).toBeGreaterThan(1);
+    expect(detail.safetyNotes).toMatch(/knee/i);
+    const [{ missing }] = await t.sql`
+      select count(*)::int as missing from exercises
+      where owner_id is null and not is_archived
+        and (form_cues is null or common_mistakes is null or safety_notes is null or difficulty is null)`;
+    expect(missing).toBe(0);
+  });
 });

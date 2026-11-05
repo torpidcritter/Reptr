@@ -79,6 +79,9 @@ export async function getExercise(db: Database, userId: string, id: string) {
       isUnilateral: exercises.isUnilateral,
       instructions: exercises.instructions,
       formCues: exercises.formCues,
+      commonMistakes: exercises.commonMistakes,
+      safetyNotes: exercises.safetyNotes,
+      difficulty: exercises.difficulty,
       isCustom: sql<boolean>`${exercises.ownerId} is not null`,
       equipment: equipment.name,
     })
