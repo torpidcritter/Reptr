@@ -46,7 +46,8 @@ export function WorkoutScreen({
     getActiveWorkoutAction()
       .then((w) => {
         if (w && !useWorkoutStore.getState().workout) {
-          useWorkoutStore.getState().start(w);
+          const { version, ...snapshot } = w;
+          useWorkoutStore.getState().start(snapshot, version);
           useWorkoutStore.getState().markSynced(useWorkoutStore.getState().revision);
         }
       })
@@ -133,6 +134,13 @@ function StartPanel({ routines, startFrom }: { routines: RoutineOption[]; startF
 
 function SyncBadge() {
   const sync = useWorkoutStore((s) => s.sync);
+  const mergedAt = useWorkoutStore((s) => s.mergedAt);
+  if (mergedAt)
+    return (
+      <span role="status" className="text-muted-foreground text-xs">
+        Combined with changes from your other device
+      </span>
+    );
   if (sync === "offline")
     return (
       <span className="inline-flex items-center gap-1 text-xs text-amber-500">

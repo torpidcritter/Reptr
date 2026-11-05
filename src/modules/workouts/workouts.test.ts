@@ -282,4 +282,41 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     await saveWorkoutSnapshot(t.db, alice, w);
     await expect(saveWorkoutSnapshot(t.db, bob, w)).rejects.toBeInstanceOf(WorkoutLockedError);
   });
+
+  it("combines a workout edited on two devices instead of overwriting", async () => {
+    const carol = randomUUID();
+    await t.addUser(carol);
+    const phone = { deviceId: "phone-device-1", baseVersion: null as number | null };
+    const laptop = { deviceId: "laptop-device", baseVersion: null as number | null };
+    const w = emptyWorkout();
+    w.exercises.push(exerciseFor(bench(), { sets: 2 }));
+    const first = await saveWorkoutSnapshot(t.db, carol, w, phone);
+    expect(first).toMatchObject({ version: 1, merged: undefined });
+
+    // The laptop picks it up at version 1 and logs a set...
+    const onLaptop = structuredClone(w);
+    onLaptop.exercises[0].sets[0] = {
+      ...onLaptop.exercises[0].sets[0],
+      weightKg: 80,
+      reps: 5,
+      completedAt: new Date().toISOString(),
+    };
+    const l = await saveWorkoutSnapshot(t.db, carol, onLaptop, { ...laptop, baseVersion: 1 });
+    expect(l).toMatchObject({ version: 2, merged: undefined });
+
+    // ...while the phone, still on version 1, adds an exercise.
+    const onPhone = structuredClone(w);
+    onPhone.exercises.push(exerciseFor(row(), { sets: 1 }));
+    const p = await saveWorkoutSnapshot(t.db, carol, onPhone, { ...phone, baseVersion: 1 });
+    expect(p.version).toBe(3);
+    expect(p.merged).toBeDefined();
+    const saved = (await getActiveWorkout(t.db, carol))!;
+    expect(saved.exercises.map((e) => e.name)).toEqual(["Barbell Bench Press", "Barbell Row"]);
+    expect(saved.exercises[0].sets[0]).toMatchObject({ weightKg: 80, reps: 5 });
+    expect(saved.version).toBe(3);
+
+    // A device that has seen the latest version just saves.
+    const next = await saveWorkoutSnapshot(t.db, carol, saved, { ...laptop, baseVersion: 3 });
+    expect(next).toMatchObject({ version: 4, merged: undefined });
+  });
 });

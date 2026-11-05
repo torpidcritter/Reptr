@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { exercises, workoutExercises, workouts, workoutSets } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { recordPersonalRecords } from "@/modules/analytics/records";
+import { mergeWorkouts } from "./merge";
 import type { ExerciseSnapshot, SetSnapshot, WorkoutSnapshot } from "./snapshot";
 
 export class WorkoutLockedError extends Error {}
@@ -11,7 +12,15 @@ export class WorkoutLockedError extends Error {}
  * replaced wholesale. Once completed or abandoned it's locked: a repeat of the same
  * finish is accepted (a retry), anything else is refused.
  */
-export async function saveWorkoutSnapshot(db: Database, userId: string, w: WorkoutSnapshot) {
+export type SyncInfo = { deviceId: string; baseVersion: number | null };
+
+export async function saveWorkoutSnapshot(
+  db: Database,
+  userId: string,
+  incoming: WorkoutSnapshot,
+  sync?: SyncInfo,
+) {
+  let w = incoming;
   const ids = [
     ...new Set(w.exercises.flatMap((e) => [e.exerciseId, e.substitutedFromId ?? e.exerciseId])),
   ];
@@ -29,17 +38,29 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
   }
 
   return db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ userId: workouts.userId, status: workouts.status })
-      .from(workouts)
-      .where(eq(workouts.id, w.id))
-      .for("update");
+    const [existing] = await tx.select().from(workouts).where(eq(workouts.id, w.id)).for("update");
 
     if (existing && existing.userId !== userId) throw new WorkoutLockedError("Not your workout");
     if (existing && (existing.status === "completed" || existing.status === "abandoned")) {
-      if (existing.status === w.status) return { status: existing.status };
+      if (existing.status === w.status)
+        return { status: existing.status, version: existing.version };
       throw new WorkoutLockedError("This workout is already finished");
     }
+
+    // Another device saved since this one last heard from the server: combine the two
+    // copies instead of letting this save overwrite theirs.
+    let merged: WorkoutSnapshot | undefined;
+    if (
+      existing &&
+      sync &&
+      existing.deviceId &&
+      existing.deviceId !== sync.deviceId &&
+      sync.baseVersion !== existing.version
+    ) {
+      const theirs = await loadSnapshot(tx as unknown as Database, existing);
+      w = merged = mergeWorkouts(theirs, w);
+    }
+    const version = (existing?.version ?? 0) + 1;
 
     const finishing = w.status === "completed" || w.status === "abandoned";
     const finishedAt = finishing ? new Date(w.finishedAt ?? Date.now()) : null;
@@ -66,6 +87,8 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
       startedAt: new Date(w.startedAt),
       finishedAt,
       notes: w.notes,
+      version,
+      deviceId: sync?.deviceId ?? existing?.deviceId ?? null,
     };
     await tx
       .insert(workouts)
@@ -113,7 +136,7 @@ export async function saveWorkoutSnapshot(db: Database, userId: string, w: Worko
       if (sets.length) await tx.insert(workoutSets).values(sets);
     }
     if (w.status === "completed") await recordPersonalRecords(tx, userId, finishedAt!, kept);
-    return { status: w.status };
+    return { status: w.status, version, merged };
   });
 }
 
@@ -124,7 +147,7 @@ export async function getActiveWorkout(db: Database, userId: string) {
     .from(workouts)
     .where(and(eq(workouts.userId, userId), inArray(workouts.status, ["active", "paused"])))
     .limit(1);
-  return w ? loadSnapshot(db, w) : null;
+  return w ? { ...(await loadSnapshot(db, w)), version: w.version } : null;
 }
 
 export async function getWorkout(db: Database, userId: string, id: string) {
