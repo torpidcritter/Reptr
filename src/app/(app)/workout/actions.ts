@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
 import { applyDeload, blockWeek } from "@/modules/programs/block";
@@ -21,6 +22,8 @@ export type SaveResult = { ok: true } | { ok: false; locked?: boolean; error: st
 
 export async function saveWorkoutAction(snapshot: WorkoutSnapshot): Promise<SaveResult> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { ok: false, error: busy };
   const parsed = workoutSnapshotSchema.safeParse(snapshot);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   try {

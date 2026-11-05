@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
 import { requireUser } from "@/lib/auth";
 import { checkinSchema, saveCheckin } from "@/modules/recovery/recovery";
 
 export async function saveCheckinAction(payload: unknown): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const parsed = checkinSchema.safeParse(payload);
   if (!parsed.success)
     return {

@@ -1,10 +1,13 @@
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
+import { overLimit } from "@/lib/guard";
 import { exportAll, setRows, toCsv } from "@/modules/export/export";
 
 /** Downloads all of the user's data: ?format=json (everything) or ?format=csv (one row per set). */
 export async function GET(request: Request) {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "export");
+  if (busy) return new Response(busy, { status: 429, headers: { "Retry-After": "600" } });
   const format = new URL(request.url).searchParams.get("format") === "csv" ? "csv" : "json";
   const stamp = new Date().toISOString().slice(0, 10);
   const headers = { "Cache-Control": "no-store" };

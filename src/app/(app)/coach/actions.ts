@@ -4,6 +4,8 @@ import OpenAI from "openai";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
+import { overLimit } from "@/lib/guard";
+import { log } from "@/lib/log";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
 import { entrySchema, logEntry } from "@/modules/body/body";
@@ -37,6 +39,8 @@ export async function askCoachAction(history: unknown): Promise<CoachReply> {
   const parsed = historySchema.safeParse(history);
   if (!parsed.success || parsed.data.at(-1)!.role !== "user")
     return { error: "Something went wrong with that message." };
+  const busy = await overLimit(user.id, "coach", "coachDaily");
+  if (busy) return { error: busy };
 
   const [profile, tz, memories] = await Promise.all([
     getProfile(user.id),
@@ -63,6 +67,7 @@ export async function askCoachAction(history: unknown): Promise<CoachReply> {
     return { reply: out.reply, proposals: out.proposals };
   } catch (e) {
     const status = (e as { status?: number }).status;
+    log.error("coach_failed", { status, err: e });
     return {
       error:
         status === 401
@@ -103,6 +108,8 @@ export async function confirmProposalAction(
   proposal: unknown,
 ): Promise<{ done?: string; error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const p = proposalSchema.safeParse(proposal);
   if (!p.success) return { error: "That change couldn't be read." };
   try {
@@ -149,6 +156,8 @@ export async function addMemoryAction(payload: {
   content: string;
 }): Promise<{ error?: string }> {
   const user = await requireUser();
+  const busy = await overLimit(user.id, "write");
+  if (busy) return { error: busy };
   const m = memorySchema.safeParse(payload);
   if (!m.success) return { error: m.error.issues[0].message };
   try {
