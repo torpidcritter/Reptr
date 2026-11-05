@@ -19,6 +19,7 @@ export async function startProgramAction(payload: {
   await audit(db, user.id, "program_started", { name: parsed.data.name });
   revalidatePath("/programs");
   revalidatePath("/history");
+  revalidatePath("/plan");
   return {};
 }
 
@@ -28,4 +29,5 @@ export async function endProgramAction() {
   await audit(db, user.id, "program_ended");
   revalidatePath("/programs");
   revalidatePath("/history");
+  revalidatePath("/plan");
 }

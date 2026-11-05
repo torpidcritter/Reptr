@@ -1,13 +1,4 @@
-import {
-  CalendarDays,
-  CalendarRange,
-  ChevronRight,
-  Library,
-  ListChecks,
-  Play,
-  Target,
-  Trophy,
-} from "lucide-react";
+import { ChevronRight, History, Library, ListChecks, Play } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ComponentType } from "react";
@@ -47,8 +38,8 @@ function NavCard({
 export default function Page() {
   return (
     <>
-      <PageHeader title="Train" subtitle="Routines, live workouts and history" />
-      <Link href="/workout" className={buttonVariants({ size: "lg", className: "mb-4 w-full" })}>
+      <PageHeader title="Train" />
+      <Link href="/workout" className={buttonVariants({ size: "lg", className: "mb-6 w-full" })}>
         <Play /> Start workout
       </Link>
       <div className="grid gap-3 md:grid-cols-2">
@@ -56,37 +47,19 @@ export default function Page() {
           href="/routines"
           icon={ListChecks}
           title="Routines"
-          body="Push, pull, legs and your other plans"
-        />
-        <NavCard
-          href="/programs"
-          icon={CalendarRange}
-          title="Training block"
-          body="Several weeks of training with planned deloads"
-        />
-        <NavCard
-          href="/history"
-          icon={CalendarDays}
-          title="Calendar"
-          body="Your weekly plan and past workouts"
+          body="Your saved workouts, ready to start"
         />
         <NavCard
           href="/exercises"
           icon={Library}
           title="Exercise library"
-          body="Browse, search and add your own"
+          body="Search, learn the technique, add your own"
         />
         <NavCard
-          href="/goals"
-          icon={Target}
-          title="Goals"
-          body="Targets for lifts, body weight and consistency"
-        />
-        <NavCard
-          href="/achievements"
-          icon={Trophy}
-          title="Achievements"
-          body="Milestones and your personal records timeline"
+          href="/history"
+          icon={History}
+          title="Workout history"
+          body="Every finished workout, newest first"
         />
       </div>
     </>
