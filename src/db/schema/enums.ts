@@ -73,3 +73,5 @@ export const bodyMetricType = pgEnum("body_metric_type", [
 export const photoPose = pgEnum("photo_pose", ["front", "side", "back"]);
 
 export const difficulty = pgEnum("difficulty", ["beginner", "intermediate", "advanced"]);
+
+export const goalKind = pgEnum("goal_kind", ["strength", "bodyweight", "consistency"]);
