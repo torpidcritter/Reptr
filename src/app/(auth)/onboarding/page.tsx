@@ -23,7 +23,7 @@ export default function OnboardingPage() {
       </Suspense>
       <h1 className="text-2xl font-semibold tracking-tight">Set up Reptr</h1>
       <p className="text-muted-foreground mt-1 mb-6 text-sm">
-        A few basics so your numbers show up right. You can change these later.
+        Three quick steps so Reptr fits you. You can change any of this later.
       </p>
       <Card className="p-5">
         <OnboardingForm />

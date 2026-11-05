@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { onboardingSchema } from "./onboarding";
+import { onboardingFromForm, onboardingSchema } from "./onboarding";
 
 const base = { unitSystem: "metric", goal: "all_round" };
 
@@ -8,10 +8,14 @@ describe("onboarding form", () => {
     expect(onboardingSchema.parse(base)).toEqual({
       displayName: null,
       unitSystem: "metric",
+      dateOfBirth: null,
       heightCm: null,
+      weightKg: null,
       goal: "all_round",
       experience: null,
+      trainingDays: [],
       trainingDaysPerWeek: null,
+      equipment: [],
     });
   });
 
@@ -21,7 +25,6 @@ describe("onboarding form", () => {
       displayName: " ",
       height: "",
       experience: "",
-      trainingDaysPerWeek: "",
     });
     expect(v.heightCm).toBeNull();
     expect(v.displayName).toBeNull();
@@ -41,11 +44,25 @@ describe("onboarding form", () => {
     expect(r.error?.issues[0].path).toEqual(["height"]);
   });
 
-  it("limits training days to 1–7", () => {
-    expect(onboardingSchema.safeParse({ ...base, trainingDaysPerWeek: "8" }).success).toBe(false);
-    expect(onboardingSchema.parse({ ...base, trainingDaysPerWeek: "4" }).trainingDaysPerWeek).toBe(
-      4,
-    );
+  it("keeps the ticked weekdays and equipment from the form, once each", () => {
+    const form = new FormData();
+    form.set("unitSystem", "metric");
+    form.set("goal", "strength");
+    for (const d of ["4", "0", "2", "0"]) form.append("trainingDays", d);
+    for (const x of ["dumbbells", "barbell"]) form.append("equipment", x);
+    const v = onboardingSchema.parse(onboardingFromForm(form));
+    expect(v.trainingDays).toEqual([0, 2, 4]);
+    expect(v.trainingDaysPerWeek).toBe(3);
+    expect(v.equipment).toEqual(["dumbbells", "barbell"]);
+    expect(onboardingSchema.safeParse({ ...base, equipment: ["spaceship"] }).success).toBe(false);
+  });
+
+  it("turns weight into kg and age into a birth year", () => {
+    const v = onboardingSchema.parse({ ...base, unitSystem: "imperial", weight: "180", age: "30" });
+    expect(v.weightKg).toBe(81.6);
+    expect(v.dateOfBirth).toBe(`${new Date().getFullYear() - 30}-01-01`);
+    expect(onboardingSchema.safeParse({ ...base, weight: "8" }).success).toBe(false);
+    expect(onboardingSchema.safeParse({ ...base, age: "9" }).success).toBe(false);
   });
 
   it("rejects unknown goals", () => {

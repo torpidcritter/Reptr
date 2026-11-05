@@ -18,6 +18,16 @@ export const profiles = pgTable(
     experience: experienceLevel("experience"),
     goal: trainingGoal("goal").notNull().default("all_round"),
     trainingDaysPerWeek: integer("training_days_per_week"),
+    /** Preferred training weekdays, Monday = 0. */
+    trainingDays: integer("training_days")
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
+    /** What the user can train with, as keys from `equipmentOptions`. */
+    equipment: text("equipment")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     defaultRestSeconds: integer("default_rest_seconds").notNull().default(90),
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
     createdAt: createdAt(),

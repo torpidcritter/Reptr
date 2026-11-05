@@ -35,13 +35,18 @@ Migrations also create the private `progress-photos` storage bucket with per-use
 
 Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default `gpt-4.1-mini`) in the server environment. The coach answers through tools that call Reptr's own analytics (`src/modules/coach/tools.ts`), so its numbers come from your data. Anything that would change data (creating a routine, logging a weight) comes back as a proposal the user has to confirm in the app. Chat history stays in the browser.
 
-## Local data without Supabase
+## Local use without Supabase
 
-With a local Postgres and the Supabase shim (`src/db/test/supabase-shim.sql`), set `REPTR_DEV_USER_ID` to act as that user in `pnpm dev`, then fill it with ten weeks of realistic training, weigh-ins and check-ins:
+With a local Postgres and the Supabase shim (`src/db/test/supabase-shim.sql`), set `REPTR_DEV_USER_ID` to act as that user in `pnpm dev`. The user starts empty and goes through onboarding like anyone else.
+
+Sample data never goes into a real account. It lives in a separate demo account, which you fill and then view like this:
 
 ```bash
-pnpm db:demo <user-id>
+pnpm db:demo            # 10 weeks of sample training, weigh-ins and check-ins
+REPTR_DEMO=1 pnpm dev   # look around as the demo account (a banner says so)
 ```
+
+To run a production build on your own machine (much faster than dev mode), add `REPTR_LOCAL=1` so the local user still applies: `pnpm build && REPTR_LOCAL=1 pnpm start`.
 
 ## Deploying
 

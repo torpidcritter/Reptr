@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { seed } from "../src/db/seed/seed";
-import { e2eDatabaseUrl, e2eUserId } from "./env";
+import { e2eDatabaseUrl, e2eUserId, freshUserId, otherUserId } from "./env";
 
 /** A fresh database with the exercise library and one onboarded user. */
 export default async function globalSetup() {
@@ -22,6 +22,15 @@ export default async function globalSetup() {
   await sql`insert into profiles (user_id, display_name, unit_system, goal, onboarded_at)
             values (${e2eUserId}, 'Sam', 'metric', 'all_round', now())
             on conflict (user_id) do update set display_name = 'Sam', onboarded_at = now()`;
+  await sql`insert into auth.users (id, email) values (${freshUserId}, 'fresh@test'), (${otherUserId}, 'other@test')`;
+  await sql`update profiles set display_name = 'Robin', onboarded_at = now() where user_id = ${otherUserId}`;
+  await sql`insert into profiles (user_id, display_name, onboarded_at)
+            select ${otherUserId}, 'Robin', now() where not exists
+            (select 1 from profiles where user_id = ${otherUserId})`;
+  await sql`insert into workouts (user_id, name, status, started_at, finished_at)
+            values (${otherUserId}, 'Robin private session', 'completed', now() - interval '1 day', now() - interval '23 hours')`;
+  await sql`insert into body_metrics (user_id, type, value, recorded_at)
+            values (${otherUserId}, 'weight', 111.1, now() - interval '1 day')`;
   await sql.end();
 }
 

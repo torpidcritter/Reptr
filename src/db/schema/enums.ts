@@ -9,6 +9,7 @@ export const trainingGoal = pgEnum("training_goal", [
   "strength",
   "recomposition",
   "conditioning",
+  "maintenance",
 ]);
 
 export const bodyRegion = pgEnum("body_region", ["upper", "lower", "core", "full_body"]);
