@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { saveWorkoutAction } from "@/app/(app)/workout/actions";
-import { useWorkoutStore } from "@/lib/workout-store";
+import { deviceId, useWorkoutStore } from "@/lib/workout-store";
 
 const RETRY_MS = [2000, 5000, 10000, 30000];
 
@@ -18,17 +18,25 @@ export function WorkoutSyncer() {
 
   useEffect(() => {
     const run = async () => {
-      const { workout, revision, syncedRevision, hydrated } = useWorkoutStore.getState();
+      const { workout, revision, syncedRevision, hydrated, serverVersion } =
+        useWorkoutStore.getState();
       if (!hydrated || !workout || inFlight.current || revision <= syncedRevision) return;
 
       inFlight.current = true;
       useWorkoutStore.getState().setSync("saving");
       try {
-        const res = await saveWorkoutAction(workout);
+        const res = await saveWorkoutAction(workout, {
+          deviceId: deviceId(),
+          baseVersion: serverVersion,
+        });
         const locked = !res.ok && res.locked === true;
         if (res.ok || locked) {
           attempt.current = 0;
-          useWorkoutStore.getState().markSynced(revision);
+          if (res.ok && res.merged) {
+            useWorkoutStore.getState().adoptMerged(res.merged, res.version);
+            return;
+          }
+          useWorkoutStore.getState().markSynced(revision, res.ok ? res.version : undefined);
           const latest = useWorkoutStore.getState();
           const finished = workout.status === "completed" || workout.status === "abandoned";
           if (

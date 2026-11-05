@@ -120,6 +120,13 @@
       "when": 1793867910662,
       "tag": "0016_applied_ops",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793868177683,
+      "tag": "0017_workout_versions",
+      "breakpoints": true
     }
   ]
 }

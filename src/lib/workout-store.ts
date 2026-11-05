@@ -4,6 +4,7 @@ import { del, get, set } from "idb-keyval";
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { SetSnapshot, WorkoutSnapshot } from "@/modules/workouts/snapshot";
+import { mergeWorkouts } from "@/modules/workouts/merge";
 import { emptySet } from "@/modules/workouts/snapshot";
 
 // The active workout is kept in IndexedDB on the device, so a refresh, a closed tab
@@ -35,10 +36,14 @@ type State = {
   hydrated: boolean;
   /** The last deleted set, kept briefly so it can be undone. Not persisted. */
   lastRemoved: RemovedSet | null;
+  /** The server's version of this workout when this device last saved or loaded it. */
+  serverVersion: number | null;
+  /** Set when this device's copy was combined with edits from another device. Not persisted. */
+  mergedAt: number | null;
 };
 
 type Actions = {
-  start: (w: WorkoutSnapshot) => void;
+  start: (w: WorkoutSnapshot, serverVersion?: number | null) => void;
   clear: () => void;
   edit: (fn: (w: WorkoutSnapshot) => void) => void;
   updateSet: (exerciseKey: string, setId: string, patch: Partial<SetSnapshot>) => void;
@@ -50,7 +55,9 @@ type Actions = {
   startRest: (seconds: number) => void;
   adjustRest: (bySeconds: number) => void;
   stopRest: () => void;
-  markSynced: (revision: number) => void;
+  markSynced: (revision: number, serverVersion?: number) => void;
+  /** Takes the server's combined copy, keeping any edits made here since it was sent. */
+  adoptMerged: (merged: WorkoutSnapshot, serverVersion: number) => void;
   setSync: (s: SyncState) => void;
 };
 
@@ -66,10 +73,21 @@ export const useWorkoutStore = create<State & Actions>()(
       rest: null,
       hydrated: false,
       lastRemoved: null,
+      serverVersion: null,
+      mergedAt: null,
 
-      start: (w) => setState((s) => ({ workout: w, revision: s.revision + 1, rest: null })),
+      start: (w, serverVersion = null) =>
+        setState((s) => ({ workout: w, revision: s.revision + 1, rest: null, serverVersion })),
       clear: () =>
-        setState({ workout: null, rest: null, revision: 0, syncedRevision: 0, sync: "saved" }),
+        setState({
+          workout: null,
+          rest: null,
+          revision: 0,
+          syncedRevision: 0,
+          sync: "saved",
+          serverVersion: null,
+          mergedAt: null,
+        }),
 
       edit: (fn) => {
         const w = getState().workout;
@@ -161,23 +179,53 @@ export const useWorkoutStore = create<State & Actions>()(
         ),
       stopRest: () => setState({ rest: null }),
 
-      markSynced: (revision) =>
+      markSynced: (revision, serverVersion) =>
         setState((s) => ({
           syncedRevision: Math.max(s.syncedRevision, revision),
           sync: revision >= s.revision ? "saved" : s.sync,
+          serverVersion: serverVersion ?? s.serverVersion,
         })),
+      adoptMerged: (merged, serverVersion) => {
+        // The "combined" note shows for a few seconds.
+        setTimeout(() => setState({ mergedAt: null }), 8000);
+        setState((s) => ({
+          // Edits made while the save was on its way are folded in, then saved again.
+          workout:
+            s.workout && s.workout.id === merged.id ? mergeWorkouts(merged, s.workout) : merged,
+          revision: s.revision + 1,
+          serverVersion,
+          mergedAt: Date.now(),
+        }));
+      },
       setSync: (sync) => setState({ sync }),
     }),
     {
       name: "reptr-active-workout",
       storage: createJSONStorage(() => idbStorage),
-      partialize: ({ workout, revision, syncedRevision, rest }) => ({
+      partialize: ({ workout, revision, syncedRevision, rest, serverVersion }) => ({
         workout,
         revision,
         syncedRevision,
         rest,
+        serverVersion,
       }),
       onRehydrateStorage: () => () => useWorkoutStore.setState({ hydrated: true }),
     },
   ),
 );
+
+/** A random id this device keeps, so the server can tell two devices' saves apart. */
+export function deviceId() {
+  const key = "reptr-device-id";
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return (sessionId ??= crypto.randomUUID());
+  }
+}
+let sessionId: string | undefined;

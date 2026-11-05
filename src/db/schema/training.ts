@@ -98,6 +98,10 @@ export const workouts = pgTable(
     /** How many sets were on the plan when it was saved, done or not (unfinished ones aren't kept). */
     plannedSets: integer("planned_sets"),
     notes: text("notes"),
+    /** Bumped on every save, so a device can tell whether it saw the latest copy. */
+    version: integer("version").notNull().default(0),
+    /** The device that saved last (a random id it keeps), for spotting crossed edits. */
+    deviceId: text("device_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
