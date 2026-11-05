@@ -56,8 +56,8 @@ test("settings keep training days and turn on optional modules", async ({ page }
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("checkbox", { name: "Mo" })).toBeChecked();
-  await expect(page.getByRole("checkbox", { name: "We" })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Mo", exact: true })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "We", exact: true })).toBeChecked();
 
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Log food" })).toBeVisible();
