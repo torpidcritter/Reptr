@@ -71,6 +71,13 @@
       "when": 1793864162350,
       "tag": "0009_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793864862929,
+      "tag": "0010_programs",
+      "breakpoints": true
     }
   ]
 }

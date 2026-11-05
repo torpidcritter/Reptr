@@ -1,5 +1,6 @@
 import {
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   Library,
   ListChecks,
@@ -56,6 +57,12 @@ export default function Page() {
           icon={ListChecks}
           title="Routines"
           body="Push, pull, legs and your other plans"
+        />
+        <NavCard
+          href="/programs"
+          icon={CalendarRange}
+          title="Training block"
+          body="Several weeks of training with planned deloads"
         />
         <NavCard
           href="/history"

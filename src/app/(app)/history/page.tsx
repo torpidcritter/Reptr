@@ -19,6 +19,8 @@ import {
   scheduleAdherence,
   weekdayOf,
 } from "@/modules/history/schedule";
+import { blockWeek } from "@/modules/programs/block";
+import { activeProgram } from "@/modules/programs/programs";
 import { listRoutines } from "@/modules/routines/routines";
 
 export const metadata: Metadata = { title: "History" };
@@ -41,9 +43,10 @@ async function HistoryMonth({ searchParams }: Pick<PageProps<"/history">, "searc
   const today = dayOf(new Date());
   // The last four full weeks before today, for how well the plan was kept.
   const windowStart = addDays(today, -28);
-  const [all, routines, recentDays] = await Promise.all([
+  const [all, routines, program, recentDays] = await Promise.all([
     listWorkoutHistory(db, user.id, { from, to }),
     listRoutines(db, user.id),
+    activeProgram(db, user.id),
     trainingDays(
       db,
       user.id,
@@ -71,8 +74,29 @@ async function HistoryMonth({ searchParams }: Pick<PageProps<"/history">, "searc
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month, 1)));
 
+  const block = program && blockWeek(program, today);
+
   return (
     <>
+      {program && block?.status === "active" && (
+        <Link href="/programs" className="mb-4 block">
+          <Card className="hover:bg-muted flex items-center gap-3 py-3 transition-colors">
+            <span className="flex-1 text-sm">
+              <span className="font-medium">{program.name}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · week {block.week} of {program.weeks}
+                {block.kind === "deload"
+                  ? " · deload week, workouts start lighter"
+                  : block.nextDeload
+                    ? ` · deload in week ${block.nextDeload}`
+                    : ""}
+              </span>
+            </span>
+            <ChevronRight className="text-muted-foreground size-4" />
+          </Card>
+        </Link>
+      )}
       {(kept.percent != null || todayPlan.length > 0) && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2">
           {kept.percent != null && kept.planned > 0 && (
