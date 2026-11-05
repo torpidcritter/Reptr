@@ -196,6 +196,7 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     expect(saved.exercises.map((e) => [e.name, e.sets.length])).toEqual([
       ["Barbell Bench Press", 2],
     ]);
+    expect(saved.plannedSets).toBe(5); // 3 bench + 2 row were planned
     expect(summarize(saved)).toEqual({ sets: 2, volumeKg: 60 * 8 + 60 * 7, exercises: 1 });
 
     await expect(
