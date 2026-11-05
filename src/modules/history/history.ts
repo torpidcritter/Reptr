@@ -61,3 +61,29 @@ export async function trainingDays(
     );
   return rows.map((r) => r.day);
 }
+
+/**
+ * The finished workout before this one that's most like it: from the same routine if
+ * it came from one, otherwise with the same name.
+ */
+export async function previousComparable(db: Database, userId: string, workoutId: string) {
+  const [w] = await db
+    .select({ routineId: workouts.routineId, name: workouts.name, startedAt: workouts.startedAt })
+    .from(workouts)
+    .where(and(eq(workouts.id, workoutId), eq(workouts.userId, userId)));
+  if (!w) return null;
+  const [prev] = await db
+    .select({ id: workouts.id, startedAt: workouts.startedAt })
+    .from(workouts)
+    .where(
+      and(
+        eq(workouts.userId, userId),
+        eq(workouts.status, "completed"),
+        lt(workouts.startedAt, w.startedAt),
+        w.routineId ? eq(workouts.routineId, w.routineId) : eq(workouts.name, w.name),
+      ),
+    )
+    .orderBy(desc(workouts.startedAt))
+    .limit(1);
+  return prev ?? null;
+}
