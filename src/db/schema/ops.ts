@@ -1,4 +1,6 @@
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgPolicy, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { authenticatedRole } from "drizzle-orm/supabase";
+import { createdAt, id, isOwner, userId } from "./helpers";
 
 /**
  * Fixed-window request counters, one row per key (for example "coach:<user id>").
@@ -10,3 +12,27 @@ export const rateLimits = pgTable("rate_limits", {
   windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
   count: integer("count").notNull(),
 }).enableRLS();
+
+/**
+ * A record of sensitive things done on an account (sign-ins, exports, photo changes,
+ * changes the coach made after you confirmed them). Users can read their own; only the
+ * server writes. Rows go with the account when it's deleted.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: id(),
+    userId: userId(),
+    action: text("action").notNull(),
+    detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("audit_log_user_created_idx").on(t.userId, t.createdAt.desc()),
+    pgPolicy("audit_log_owner_read", {
+      for: "select",
+      to: authenticatedRole,
+      using: isOwner(t.userId),
+    }),
+  ],
+);

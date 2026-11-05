@@ -6,7 +6,13 @@ import { LoginForm } from "./login-form";
 export const metadata: Metadata = { title: "Sign in" };
 
 async function LinkError({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
-  const { error } = await searchParams;
+  const { error, deleted } = await searchParams;
+  if (deleted)
+    return (
+      <p className="bg-muted mb-4 rounded-xl p-3 text-sm">
+        Your account and all of its data have been deleted.
+      </p>
+    );
   if (!error) return null;
   return (
     <p className="bg-muted text-danger mb-4 rounded-xl p-3 text-sm">

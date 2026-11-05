@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db, schema } from "@/db";
+import { audit } from "@/modules/ops/audit";
 import { requireUser } from "@/lib/auth";
 import { onboardingSchema, restSchema } from "@/modules/profile/onboarding";
 
@@ -29,6 +30,7 @@ export async function saveSettings(
     .update(schema.profiles)
     .set({ ...parsed.data, defaultRestSeconds: rest.data })
     .where(eq(schema.profiles.userId, user.id));
+  await audit(db, user.id, "settings_changed");
   revalidatePath("/", "layout");
   return { saved: true };
 }
