@@ -17,6 +17,7 @@ import { loadRatio, readiness } from "@/modules/recovery/readiness";
 import { checkinRange, volumeBetween } from "@/modules/recovery/recovery";
 import { listRoutines } from "@/modules/routines/routines";
 import { fatigueFor } from "./fatigue-queries";
+import { memoryKinds } from "./memory";
 import { sessionReviewFor, workoutOnOrBefore } from "./review-queries";
 
 export type CoachContext = { db: Database; userId: string; timeZone: string; now: Date };
@@ -37,7 +38,12 @@ export type Proposal =
         }[];
       };
     }
-  | { kind: "log_weight"; summary: string; payload: { day: string; weightKg: number } };
+  | { kind: "log_weight"; summary: string; payload: { day: string; weightKg: number } }
+  | {
+      kind: "remember";
+      summary: string;
+      payload: { kind: (typeof memoryKinds)[number]; content: string };
+    };
 
 type Tool = {
   description: string;
@@ -304,6 +310,21 @@ export const tools: Record<string, Tool> = {
         payload: { name, items },
       };
     },
+  }),
+
+  propose_memory: tool({
+    description:
+      "Propose remembering something lasting the user told you (an injury or limitation, a preference, their equipment or schedule) so future conversations take it into account. Saved only after the user confirms. Don't use it for one-off details.",
+    proposes: true,
+    parameters: z.object({
+      kind: z.enum(memoryKinds),
+      content: z.string().min(3).max(300),
+    }),
+    run: async (_ctx, { kind, content }): Promise<Proposal> => ({
+      kind: "remember",
+      summary: `Remember: ${content.trim()}`,
+      payload: { kind, content: content.trim() },
+    }),
   }),
 
   propose_weight_entry: tool({
