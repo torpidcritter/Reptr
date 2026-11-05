@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { check, date, integer, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  date,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { authUsers } from "drizzle-orm/supabase";
 import { createdAt, ownerPolicy, updatedAt } from "./helpers";
 import { experienceLevel, themePreference, trainingGoal, unitSystem } from "./enums";
@@ -28,6 +38,9 @@ export const profiles = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    /** Optional modules the user has turned on. Workout tracking never needs them. */
+    trackNutrition: boolean("track_nutrition").notNull().default(false),
+    trackRecovery: boolean("track_recovery").notNull().default(false),
     defaultRestSeconds: integer("default_rest_seconds").notNull().default(90),
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
     createdAt: createdAt(),

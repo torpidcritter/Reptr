@@ -1,4 +1,13 @@
-import { CircleUser, Dumbbell, ListPlus, Play, Salad, Sparkles, Trophy } from "lucide-react";
+import {
+  CircleUser,
+  Dumbbell,
+  HeartPulse,
+  ListPlus,
+  Play,
+  Salad,
+  Sparkles,
+  Trophy,
+} from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -53,6 +62,7 @@ async function Dashboard() {
     fatigueFor(db, user.id, tz),
   ]);
   const units = profile?.unitSystem ?? "metric";
+  const quickCount = 1 + (profile?.trackNutrition ? 1 : 0) + (profile?.trackRecovery ? 1 : 0);
   const hour = Number(
     new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: tz }).format(
       now,
@@ -210,14 +220,34 @@ async function Dashboard() {
         </ol>
       </section>
 
-      <section aria-label="Quick actions" className="grid grid-cols-2 gap-2">
-        <LogWeightButton units={units} className="h-12" />
-        <Link
-          href="/nutrition"
-          className={buttonVariants({ variant: "outline", className: "h-12" })}
-        >
-          <Salad /> Log food
-        </Link>
+      <section
+        aria-label="Quick actions"
+        className={cn(
+          "grid gap-2",
+          quickCount > 1 && "grid-cols-2",
+          quickCount > 2 && "sm:grid-cols-3",
+        )}
+      >
+        <LogWeightButton
+          units={units}
+          className={cn("h-12", quickCount === 3 && "col-span-2 sm:col-span-1")}
+        />
+        {profile?.trackNutrition && (
+          <Link
+            href="/nutrition"
+            className={buttonVariants({ variant: "outline", className: "h-12" })}
+          >
+            <Salad /> Log food
+          </Link>
+        )}
+        {profile?.trackRecovery && (
+          <Link
+            href="/recovery"
+            className={buttonVariants({ variant: "outline", className: "h-12" })}
+          >
+            <HeartPulse /> Check in
+          </Link>
+        )}
       </section>
 
       {insight && (

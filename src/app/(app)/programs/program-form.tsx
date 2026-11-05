@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { startProgramAction } from "./actions";
+import { useConfirm } from "@/components/ui/confirm";
 
 const field = "bg-background h-11 w-full rounded-lg border px-3 text-base";
 
@@ -14,10 +15,19 @@ export function ProgramForm({ monday, replacing }: { monday: string; replacing: 
   const [deloadEvery, setDeloadEvery] = useState("4");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const ask = useConfirm();
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (replacing && !confirm("This ends your current block. Start a new one?")) return;
+    if (
+      replacing &&
+      !(await ask({
+        title: "Start a new block?",
+        body: "This ends your current block.",
+        confirm: "Start new block",
+      }))
+    )
+      return;
     start(async () => {
       const res = await startProgramAction({ name, startDate, weeks, deloadEvery });
       if (res.error) return setError(res.error);

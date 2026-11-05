@@ -22,6 +22,7 @@ import { useWorkoutStore } from "@/lib/workout-store";
 import { fieldsFor, isSetFilled, type ExerciseSnapshot } from "@/modules/workouts/snapshot";
 import type { PreviousPerformance } from "@/modules/workouts/workouts";
 import { SetRow } from "./set-row";
+import { useConfirm } from "@/components/ui/confirm";
 
 export function ExerciseCard({
   exercise,
@@ -43,6 +44,7 @@ export function ExerciseCard({
   restAfterSet: boolean;
   onSwap: () => void;
 }) {
+  const ask = useConfirm();
   const { updateSet, addSet, removeSet, edit, startRest, repeatLastSet } =
     useWorkoutStore.getState();
   const [menu, setMenu] = useState(false);
@@ -227,10 +229,15 @@ export function ExerciseCard({
             variant="ghost"
             size="sm"
             className="text-danger col-span-2"
-            onClick={() => {
+            onClick={async () => {
               if (
                 !exercise.sets.some((s) => s.completedAt) ||
-                confirm(`Remove ${exercise.name} and its sets?`)
+                (await ask({
+                  title: `Remove ${exercise.name}?`,
+                  body: "Its ticked-off sets go too.",
+                  confirm: "Remove",
+                  danger: true,
+                }))
               )
                 edit((w) => {
                   w.exercises.splice(index, 1);

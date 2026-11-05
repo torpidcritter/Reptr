@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { BodyTabs } from "@/components/layout/body-tabs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
@@ -188,8 +187,7 @@ async function Day({ searchParams }: Pick<PageProps<"/nutrition">, "searchParams
 export default function NutritionPage({ searchParams }: PageProps<"/nutrition">) {
   return (
     <>
-      <PageHeader title="Body" subtitle="Weight, measurements, food and recovery" />
-      <BodyTabs current="/nutrition" />
+      <PageHeader title="Nutrition" subtitle="Food, water and calorie targets" />
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <Day searchParams={searchParams} />
       </Suspense>

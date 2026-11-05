@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { z } from "zod";
+import { equipmentList, muscles } from "@/db/seed/muscles";
 import { listExercises, similarExercises } from "@/modules/exercises/queries";
 
 export type PickerExercise = {
@@ -13,9 +14,16 @@ export type PickerExercise = {
 };
 
 /** Search used by the exercise picker in the routine builder and workout logger. */
-export async function searchExercises(q: string): Promise<PickerExercise[]> {
+export async function searchExercises(
+  q: string,
+  filters: { muscle?: string; equipment?: string } = {},
+): Promise<PickerExercise[]> {
   const user = await requireUser();
-  const rows = await listExercises(db, user.id, { q: q.slice(0, 80) });
+  const muscle = muscles.some((m) => m.slug === filters.muscle) ? filters.muscle : undefined;
+  const equipment = equipmentList.some((e) => e.slug === filters.equipment)
+    ? filters.equipment
+    : undefined;
+  const rows = await listExercises(db, user.id, { q: q.slice(0, 80), muscle, equipment });
   return rows.slice(0, 40).map((e) => ({
     id: e.id,
     name: e.name,

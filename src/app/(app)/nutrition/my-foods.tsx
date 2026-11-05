@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { deleteSavedFoodAction, logSavedFoodAction, saveRecipeAction } from "./actions";
+import { useConfirm } from "@/components/ui/confirm";
 
 export type SavedFood = {
   id: string;
@@ -25,6 +26,7 @@ const num = (v: string) => {
 
 /** The user's own foods and recipes: pick one, choose servings, add it to the day. */
 export function MyFoods({ foods, day, meal }: { foods: SavedFood[]; day: string; meal: string }) {
+  const ask = useConfirm();
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<string | null>(null);
   const [servings, setServings] = useState("1");
@@ -98,13 +100,20 @@ export function MyFoods({ foods, day, meal }: { foods: SavedFood[]; day: string;
             size="icon"
             aria-label={`Delete ${food.name} from my foods`}
             disabled={pending}
-            onClick={() =>
-              confirm(`Delete "${food.name}" from your foods? Logged entries stay.`) &&
-              start(async () => {
-                await deleteSavedFoodAction(food.id);
-                setPicked(null);
-              })
-            }
+            onClick={async () => {
+              if (
+                await ask({
+                  title: `Delete "${food.name}" from your foods?`,
+                  body: "Food you've already logged stays.",
+                  confirm: "Delete",
+                  danger: true,
+                })
+              )
+                start(async () => {
+                  await deleteSavedFoodAction(food.id);
+                  setPicked(null);
+                });
+            }}
           >
             <Trash2 />
           </Button>

@@ -56,9 +56,11 @@ async function main() {
   const db = drizzle(sql, { schema }) as unknown as Database;
   await sql`insert into auth.users (id, email) values (${userId}, 'demo@reptr.local')
     on conflict (id) do nothing`;
-  await sql`insert into profiles (user_id, display_name, unit_system, goal, training_days_per_week, onboarded_at)
-    values (${userId}, 'Demo', 'metric', 'hypertrophy', 3, now())
-    on conflict (user_id) do update set display_name = 'Demo',
+  await sql`insert into profiles (user_id, display_name, unit_system, goal, training_days_per_week,
+      training_days, track_nutrition, track_recovery, onboarded_at)
+    values (${userId}, 'Demo', 'metric', 'hypertrophy', 3, '{0,2,4}', true, true, now())
+    on conflict (user_id) do update set display_name = 'Demo', training_days = '{0,2,4}',
+      training_days_per_week = 3, track_nutrition = true, track_recovery = true,
       onboarded_at = coalesce(profiles.onboarded_at, now())`;
   const [{ n }] = await sql`select count(*)::int as n from workouts where user_id = ${userId}`;
   if (n > 0) {

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { BarChart } from "@/components/charts/bar-chart";
-import { BodyTabs } from "@/components/layout/body-tabs";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
@@ -232,8 +231,7 @@ async function Recovery() {
 export default function RecoveryPage() {
   return (
     <>
-      <PageHeader title="Body" subtitle="Weight, measurements, food and recovery" />
-      <BodyTabs current="/recovery" />
+      <PageHeader title="Recovery" subtitle="Daily check-ins for sleep, energy and soreness" />
       <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
         <Recovery />
       </Suspense>

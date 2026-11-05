@@ -19,8 +19,11 @@ test("log a workout from an empty start to its summary", async ({ page }) => {
   await page.getByRole("button", { name: "Complete set 1" }).click();
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
-  page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Finish" }).click();
+  await page
+    .getByRole("dialog", { name: "Finish workout?" })
+    .getByRole("button", { name: "Finish" })
+    .click();
   await page.waitForURL(/\/history\/[0-9a-f-]{36}/);
   await expect(page.getByText("Barbell Bench Press").first()).toBeVisible();
 
