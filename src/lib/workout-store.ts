@@ -11,7 +11,7 @@ import { emptySet } from "@/modules/workouts/snapshot";
 
 const hasIdb = () => typeof indexedDB !== "undefined";
 
-const idbStorage: StateStorage = {
+export const idbStorage: StateStorage = {
   getItem: async (name) => (hasIdb() ? ((await get<string>(name)) ?? null) : null),
   setItem: async (name, value) => {
     if (hasIdb()) await set(name, value);

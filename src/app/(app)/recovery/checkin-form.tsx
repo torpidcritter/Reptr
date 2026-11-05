@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { saveCheckinAction } from "./actions";
+import { queuedMessage, sendOrQueue } from "@/lib/outbox";
 import { muscles as muscleList } from "@/db/seed/muscles";
 import { mapMuscles } from "@/modules/recovery/muscle-map";
 
@@ -51,7 +51,7 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = await saveCheckinAction({
+      const res = await sendOrQueue("checkin", {
         day,
         ...scores,
         sleepHours: n(sleep),
@@ -60,7 +60,7 @@ export function CheckinForm({ day, initial }: { day: string; initial: CheckinVal
         hrvMs: n(hrv, true),
         soreMuscles: sore,
       });
-      setMsg(res.error ?? "Saved.");
+      setMsg(res.error ?? (res.queued ? queuedMessage : "Saved."));
     });
   };
 
