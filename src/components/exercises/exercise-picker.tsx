@@ -3,7 +3,8 @@
 import { Plus, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
+import { equipmentList, muscles } from "@/db/seed/muscles";
 import { searchExercises, similarExercisesAction, type PickerExercise } from "./actions";
 
 /** A full-height sheet for finding an exercise. Calls onPick and stays open so several can be added. */
@@ -21,7 +22,9 @@ export function ExercisePicker({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<PickerExercise[]>([]);
+  const [muscle, setMuscle] = useState("");
+  const [gear, setGear] = useState("");
+  const [results, setResults] = useState<PickerExercise[] | null>(null);
   const [added, setAdded] = useState<string[]>([]);
   const [found, setFound] = useState<{
     id: string;
@@ -56,14 +59,14 @@ export function ExercisePicker({
     if (!open) return;
     let cancelled = false;
     const t = setTimeout(async () => {
-      const r = await searchExercises(q.trim());
+      const r = await searchExercises(q.trim(), { muscle, equipment: gear });
       if (!cancelled) setResults(r);
     }, 200);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [q, open]);
+  }, [q, muscle, gear, open]);
 
   return (
     <dialog
@@ -89,7 +92,38 @@ export function ExercisePicker({
             <X />
           </Button>
         </div>
+        <div className="grid grid-cols-2 gap-2 border-b px-3 py-2">
+          <label>
+            <span className="sr-only">Muscle</span>
+            <Select value={muscle} onChange={(e) => setMuscle(e.target.value)} className="h-10">
+              <option value="">All muscles</option>
+              {muscles.map((m) => (
+                <option key={m.slug} value={m.slug}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label>
+            <span className="sr-only">Equipment</span>
+            <Select value={gear} onChange={(e) => setGear(e.target.value)} className="h-10">
+              <option value="">All equipment</option>
+              {equipmentList
+                .filter((x) => x.slug !== "none")
+                .map((x) => (
+                  <option key={x.slug} value={x.slug}>
+                    {x.name}
+                  </option>
+                ))}
+            </Select>
+          </label>
+        </div>
         <div className="flex-1 overflow-y-auto">
+          {results?.length === 0 && (
+            <p className="text-muted-foreground px-4 py-6 text-center text-sm">
+              No exercises match. Try fewer words or clear a filter.
+            </p>
+          )}
           {similarTo && similar.length > 0 && q.trim() === "" && (
             <section aria-label={`Alternatives to ${similarTo.name}`} className="border-b">
               <h2 className="text-muted-foreground px-4 pt-3 pb-1 text-xs font-semibold uppercase">
@@ -118,7 +152,7 @@ export function ExercisePicker({
             </section>
           )}
           <ul className="divide-y">
-            {results.map((e) => (
+            {(results ?? []).map((e) => (
               <li key={e.id}>
                 <button
                   type="button"

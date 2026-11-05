@@ -1,6 +1,7 @@
-import { Download, LogOut } from "lucide-react";
+import { ChevronRight, Download, LogOut } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -69,7 +70,10 @@ async function ProfileBody() {
                   heightCm: profile.heightCm,
                   goal: profile.goal,
                   experience: profile.experience,
-                  trainingDaysPerWeek: profile.trainingDaysPerWeek,
+                  trainingDays: profile.trainingDays,
+                  equipment: profile.equipment,
+                  trackNutrition: profile.trackNutrition,
+                  trackRecovery: profile.trackRecovery,
                   defaultRestSeconds: profile.defaultRestSeconds,
                 }}
               />
@@ -77,6 +81,27 @@ async function ProfileBody() {
           </div>
         </Card>
         <div className="flex flex-col gap-4">
+          <Card>
+            <CardLabel>More</CardLabel>
+            <nav aria-label="More" className="mt-2 flex flex-col">
+              {[
+                ...(profile?.trackNutrition ? [{ href: "/nutrition", label: "Nutrition" }] : []),
+                ...(profile?.trackRecovery ? [{ href: "/recovery", label: "Recovery" }] : []),
+                { href: "/physique", label: "Body and weight" },
+                { href: "/achievements", label: "Achievements" },
+                { href: "/timeline", label: "Timeline" },
+              ].map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="hover:bg-muted -mx-2 flex items-center justify-between rounded-lg px-2 py-2.5 text-sm font-medium"
+                >
+                  {l.label}
+                  <ChevronRight className="text-muted-foreground size-4" />
+                </Link>
+              ))}
+            </nav>
+          </Card>
           <Card>
             <CardLabel>Appearance</CardLabel>
             <ThemeToggle className="mt-3" />

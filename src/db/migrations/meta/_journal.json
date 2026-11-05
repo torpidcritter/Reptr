@@ -134,6 +134,13 @@
       "when": 1793872584756,
       "tag": "0018_onboarding_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793873787375,
+      "tag": "0019_optional_modules",
+      "breakpoints": true
     }
   ]
 }

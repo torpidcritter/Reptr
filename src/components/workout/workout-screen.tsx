@@ -23,6 +23,7 @@ import type { PreviousPerformance } from "@/modules/workouts/workouts";
 import { ExerciseCard } from "./exercise-card";
 import { RestTimer } from "./rest-timer";
 import { formatClock, useNow } from "./use-now";
+import { useConfirm } from "@/components/ui/confirm";
 
 type RoutineOption = { id: string; name: string; exerciseCount: number };
 type Settings = { unitSystem: UnitSystem; defaultRestSeconds: number };
@@ -169,6 +170,7 @@ function SyncBadge() {
 }
 
 function Logger({ settings }: { settings: Settings }) {
+  const ask = useConfirm();
   const router = useRouter();
   const workout = useWorkoutStore((s) => s.workout)!;
   const { edit } = useWorkoutStore.getState();
@@ -195,19 +197,31 @@ function Logger({ settings }: { settings: Settings }) {
   const stats = summarize(workout);
   const left = estimateRemainingSeconds(workout, settings.defaultRestSeconds);
 
-  function finish() {
+  async function finish() {
     const unfinished = workout.exercises
       .flatMap((e) => e.sets)
       .filter((s) => !s.completedAt).length;
     if (stats.sets === 0) {
-      if (confirm("No sets are ticked off. Discard this workout?")) discard();
+      if (
+        await ask({
+          title: "Discard this workout?",
+          body: "No sets are ticked off, so there's nothing to save.",
+          confirm: "Discard",
+          danger: true,
+        })
+      )
+        discard();
       return;
     }
-    const msg =
-      unfinished > 0
-        ? `Finish workout? ${unfinished} set${unfinished === 1 ? " isn't" : "s aren't"} ticked off and won't be saved.`
-        : "Finish workout?";
-    if (!confirm(msg)) return;
+    const ok = await ask({
+      title: "Finish workout?",
+      body:
+        unfinished > 0
+          ? `${unfinished} set${unfinished === 1 ? " isn't" : "s aren't"} ticked off and won't be saved.`
+          : undefined,
+      confirm: "Finish",
+    });
+    if (!ok) return;
     edit((w) => {
       w.status = "completed";
       w.finishedAt = new Date().toISOString();
@@ -275,7 +289,17 @@ function Logger({ settings }: { settings: Settings }) {
       <Button
         variant="ghost"
         className="text-danger"
-        onClick={() => confirm("Discard this workout? Nothing will be saved.") && discard()}
+        onClick={async () => {
+          if (
+            await ask({
+              title: "Discard this workout?",
+              body: "Nothing will be saved.",
+              confirm: "Discard",
+              danger: true,
+            })
+          )
+            discard();
+        }}
       >
         Discard workout
       </Button>

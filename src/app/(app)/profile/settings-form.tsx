@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cmToIn } from "@/lib/units";
 import { cn } from "@/lib/utils";
-import { experienceLevels, goals } from "@/modules/profile/onboarding";
+import { weekdayNames } from "@/modules/history/schedule";
+import { equipmentOptions, experienceLevels, goals } from "@/modules/profile/onboarding";
 import { saveSettings, type SettingsState } from "./settings-actions";
 
 type Profile = {
@@ -14,9 +15,64 @@ type Profile = {
   heightCm: number | null;
   goal: string;
   experience: string | null;
-  trainingDaysPerWeek: number | null;
+  trainingDays: number[];
+  equipment: string[];
+  trackNutrition: boolean;
+  trackRecovery: boolean;
   defaultRestSeconds: number;
 };
+
+function Chip({
+  name,
+  value,
+  checked,
+  children,
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="has-checked:border-accent has-checked:bg-accent-soft hover:bg-muted flex cursor-pointer items-center justify-center rounded-xl border px-2 py-2 text-center text-sm font-medium has-focus-visible:ring-2">
+      <input
+        type="checkbox"
+        name={name}
+        value={value}
+        defaultChecked={checked}
+        className="sr-only"
+      />
+      {children}
+    </label>
+  );
+}
+
+function Toggle({
+  name,
+  label,
+  hint,
+  checked,
+}: {
+  name: string;
+  label: string;
+  hint: string;
+  checked: boolean;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <input
+        type="checkbox"
+        name={name}
+        defaultChecked={checked}
+        className="accent-accent mt-1 size-5 shrink-0"
+      />
+      <span>
+        <span className="block text-sm font-medium">{label}</span>
+        <span className="text-muted-foreground block text-xs">{hint}</span>
+      </span>
+    </label>
+  );
+}
 
 function Field({
   label,
@@ -78,7 +134,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
         </div>
       </fieldset>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <Field label={`Height (${units === "metric" ? "cm" : "in"})`} error={e.height}>
           <Input
             key={units}
@@ -88,16 +144,6 @@ export function SettingsForm({ profile }: { profile: Profile }) {
             step="0.1"
             min="0"
             defaultValue={height}
-          />
-        </Field>
-        <Field label="Training days a week" error={e.trainingDaysPerWeek}>
-          <Input
-            name="trainingDaysPerWeek"
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max="7"
-            defaultValue={profile.trainingDaysPerWeek ?? ""}
           />
         </Field>
       </div>
@@ -135,6 +181,54 @@ export function SettingsForm({ profile }: { profile: Profile }) {
           />
         </Field>
       </div>
+
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">Training days</legend>
+        <div className="grid grid-cols-7 gap-1.5">
+          {weekdayNames.map((d, i) => (
+            <Chip
+              key={d}
+              name="trainingDays"
+              value={String(i)}
+              checked={profile.trainingDays.includes(i)}
+            >
+              {d.slice(0, 2)}
+            </Chip>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium">Equipment you can use</legend>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          {equipmentOptions.map((x) => (
+            <Chip
+              key={x.value}
+              name="equipment"
+              value={x.value}
+              checked={profile.equipment.includes(x.value)}
+            >
+              {x.label}
+            </Chip>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 text-sm font-medium">Optional tracking</legend>
+        <Toggle
+          name="trackNutrition"
+          label="Nutrition"
+          hint="Log food, water and calorie targets. Adds Log food to Today."
+          checked={profile.trackNutrition}
+        />
+        <Toggle
+          name="trackRecovery"
+          label="Recovery"
+          hint="Daily check-ins for sleep, energy and soreness. Adds Check in to Today."
+          checked={profile.trackRecovery}
+        />
+      </fieldset>
 
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={pending}>

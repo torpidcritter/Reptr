@@ -6,7 +6,7 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { audit } from "@/modules/ops/audit";
 import { requireUser } from "@/lib/auth";
-import { onboardingSchema, restSchema } from "@/modules/profile/onboarding";
+import { onboardingFromForm, onboardingSchema, restSchema } from "@/modules/profile/onboarding";
 
 export type SettingsState = { errors?: Record<string, string[] | undefined>; saved?: boolean };
 
@@ -16,7 +16,7 @@ export async function saveSettings(
 ): Promise<SettingsState> {
   const user = await requireUser();
   const values = Object.fromEntries(formData);
-  const parsed = onboardingSchema.safeParse(values);
+  const parsed = onboardingSchema.safeParse(onboardingFromForm(formData));
   const rest = restSchema.safeParse(values.defaultRestSeconds);
   if (!parsed.success || !rest.success) {
     return {
@@ -26,9 +26,18 @@ export async function saveSettings(
       },
     };
   }
+  // Weight and age aren't on this form: weight is logged on its own, and age stays as set.
+  const profile: Partial<typeof parsed.data> = { ...parsed.data };
+  delete profile.weightKg;
+  delete profile.dateOfBirth;
   await db
     .update(schema.profiles)
-    .set({ ...parsed.data, defaultRestSeconds: rest.data })
+    .set({
+      ...profile,
+      defaultRestSeconds: rest.data,
+      trackNutrition: formData.get("trackNutrition") === "on",
+      trackRecovery: formData.get("trackRecovery") === "on",
+    })
     .where(eq(schema.profiles.userId, user.id));
   await audit(db, user.id, "settings_changed");
   revalidatePath("/", "layout");

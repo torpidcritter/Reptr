@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { photoBucket } from "@/modules/body/metrics";
 import { addPhotoAction, deletePhotoAction } from "./actions";
+import { useConfirm } from "@/components/ui/confirm";
 
 export type Photo = { id: string; pose: string; takenOn: string; url: string | null };
 
@@ -45,6 +46,7 @@ export function Photos({
   photos: Photo[];
   enabled: boolean;
 }) {
+  const ask = useConfirm();
   const input = useRef<HTMLInputElement>(null);
   const [pose, setPose] = useState("front");
   const [error, setError] = useState<string | null>(null);
@@ -167,8 +169,14 @@ export function Photos({
                   type="button"
                   aria-label="Delete photo"
                   className="hover:text-danger"
-                  onClick={() => {
-                    if (confirm("Delete this photo for good?"))
+                  onClick={async () => {
+                    if (
+                      await ask({
+                        title: "Delete this photo for good?",
+                        confirm: "Delete",
+                        danger: true,
+                      })
+                    )
                       start(() => deletePhotoAction(p.id));
                   }}
                 >
