@@ -1,3 +1,4 @@
+import { discardWorkout } from "./helpers";
 import { expect, test } from "@playwright/test";
 import { e2ePort } from "./env";
 
@@ -33,11 +34,7 @@ test("build a routine with picker filters, reopen it and start it", async ({ pag
   const card = page.locator("div", { hasText: "E2E Chest day" }).last();
   await card.getByRole("link", { name: "Start" }).click();
   await expect(page.getByText("Barbell Bench Press").first()).toBeVisible();
-  await page.getByRole("button", { name: "Discard workout" }).click();
-  await page
-    .getByRole("dialog", { name: "Discard this workout?" })
-    .getByRole("button", { name: "Discard" })
-    .click();
+  await discardWorkout(page);
 });
 
 test("settings keep training days and turn on optional modules", async ({ page }) => {
@@ -94,11 +91,7 @@ test("sets logged offline stay on the device and save once back online", async (
   await expect(page.getByLabel("Weight").first()).toHaveValue("72.5");
   await expect(page.getByLabel("Reps").first()).toHaveValue("9");
 
-  await page.getByRole("button", { name: "Discard workout" }).click();
-  await page
-    .getByRole("dialog", { name: "Discard this workout?" })
-    .getByRole("button", { name: "Discard" })
-    .click();
+  await discardWorkout(page);
 });
 
 test("buttons work when Reptr is opened at 127.0.0.1", async ({ page }) => {

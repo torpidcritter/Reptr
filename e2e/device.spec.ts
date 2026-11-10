@@ -1,3 +1,4 @@
+import { discardWorkout } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { otherUserId } from "./env";
 
@@ -52,17 +53,7 @@ test("another account on the same browser never sees this account's workout", as
   await page.goto("/workout");
   await expect(page.getByLabel("Weight").first()).toHaveValue("30");
 
-  await page.getByRole("button", { name: "Discard workout" }).click();
-  await page
-    .getByRole("dialog", { name: "Discard this workout?" })
-    .getByRole("button", { name: "Discard" })
-    .click();
-  // Wait until the server has the discard, so the next test starts clean.
-  await page.waitForURL(/\/train/);
-  await page.goto("/workout");
-  await expect(page.getByRole("button", { name: "Start empty workout" })).toBeVisible({
-    timeout: 15_000,
-  });
+  await discardWorkout(page);
 });
 
 test("sets logged offline after the workout was finished elsewhere are kept and saved", async ({
