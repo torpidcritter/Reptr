@@ -1,22 +1,30 @@
 import { asc, eq, getTableColumns, getTableName } from "drizzle-orm";
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
+import { getTableConfig, type PgColumn, type PgTable } from "drizzle-orm/pg-core";
 import {
   auditLog,
+  blocks,
   bodyMetrics,
   coachMemories,
+  comments,
   coachUsage,
   dailyCheckins,
+  followRequests,
+  follows,
   exercises,
   foodEntries,
   goals,
   nutritionTargets,
   personalRecords,
+  postLikes,
+  posts,
   profiles,
   programs,
   progressPhotos,
+  reports,
   routineExercises,
   routines,
   savedFoods,
+  socialProfiles,
   userGoals,
   waterEntries,
   workoutExercises,
@@ -58,6 +66,18 @@ export const exportSections = {
   coachMemories: { table: coachMemories, owner: coachMemories.userId },
   coachUsage: { table: coachUsage, owner: coachUsage.userId, order: coachUsage.createdAt },
   accountActivity: { table: auditLog, owner: auditLog.userId, order: auditLog.createdAt },
+  socialProfile: { table: socialProfiles, owner: socialProfiles.userId },
+  following: { table: follows, owner: follows.followerId, order: follows.createdAt },
+  followRequestsSent: {
+    table: followRequests,
+    owner: followRequests.requesterId,
+    order: followRequests.createdAt,
+  },
+  blocked: { table: blocks, owner: blocks.blockerId, order: blocks.createdAt },
+  posts: { table: posts, owner: posts.authorId, order: posts.createdAt },
+  likes: { table: postLikes, owner: postLikes.userId, order: postLikes.createdAt },
+  comments: { table: comments, owner: comments.authorId, order: comments.createdAt },
+  reportsMade: { table: reports, owner: reports.reporterId, order: reports.createdAt },
 } satisfies Record<string, Section>;
 
 /** Tables with a user column that are deliberately left out, and why. */
@@ -164,5 +184,10 @@ export const exportedTableNames = () =>
   Object.values(exportSections).map((s) => getTableName(s.table));
 
 /** Does a table hold per-user rows? (A user_id column, or exercises' owner_id.) */
+/** Tables holding a person's data: any that points at an account (user, profile or social profile). */
+const PERSON_TABLES = new Set(["users", "profiles", "social_profiles"]);
 export const hasUserColumn = (t: PgTable) =>
-  Object.values(getTableColumns(t)).some((c) => c.name === "user_id" || c.name === "owner_id");
+  Object.values(getTableColumns(t)).some((c) => c.name === "user_id" || c.name === "owner_id") ||
+  getTableConfig(t).foreignKeys.some((fk) =>
+    PERSON_TABLES.has(getTableName(fk.reference().foreignTable)),
+  );

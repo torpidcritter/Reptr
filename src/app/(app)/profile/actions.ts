@@ -8,6 +8,7 @@ import { log } from "@/lib/log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { emptyFolder } from "@/lib/supabase/storage";
 import { photoBucket } from "@/modules/body/body";
+import { avatarBucket } from "@/modules/social/avatars";
 import { deleteAccount, deleteConfirmWord } from "@/modules/ops/account";
 import { audit } from "@/modules/ops/audit";
 
@@ -47,6 +48,7 @@ export async function deleteAccountAction(
   let photos = 0;
   try {
     photos = await emptyFolder(photoBucket, user.id);
+    photos += await emptyFolder(avatarBucket, user.id);
   } catch (err) {
     log.error("account_delete_photos_failed", { err, ref });
     return { error: "Your photos couldn't be removed, so nothing was deleted. Try again." };

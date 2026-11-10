@@ -183,6 +183,27 @@
       "when": 1794296072194,
       "tag": "0025_exercise_fk_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794297108658,
+      "tag": "0026_social_functions",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794297167042,
+      "tag": "0027_social_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794297188580,
+      "tag": "0028_social_rules",
+      "breakpoints": true
     }
   ]
 }

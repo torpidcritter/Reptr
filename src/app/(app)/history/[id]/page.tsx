@@ -16,6 +16,8 @@ import { summarize } from "@/modules/workouts/snapshot";
 import { previousComparable } from "@/modules/history/history";
 import { getWorkout } from "@/modules/workouts/workouts";
 import { sessionReviewFor } from "@/modules/coach/review-queries";
+import { myProfile, postForWorkout } from "@/modules/social/social";
+import { ShareWorkout } from "@/components/social/share-workout";
 import { cn } from "@/lib/utils";
 import { PendingWorkout } from "./pending";
 
@@ -27,12 +29,14 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [user, tz] = await Promise.all([requireUser(), getTimeZone()]);
-  const [w, profile, prs, prev, review] = await Promise.all([
+  const [w, profile, prs, prev, review, social, post] = await Promise.all([
     getWorkout(db, user.id, id),
     getProfile(user.id),
     recordsForWorkout(db, user.id, id),
     previousComparable(db, user.id, id),
     sessionReviewFor(db, user.id, id, tz),
+    myProfile(db, user.id),
+    postForWorkout(db, user.id, id),
   ]);
   const prCount = Object.values(prs).flat().length;
   if (!w || w.status === "active" || w.status === "paused") return <PendingWorkout id={id} />;
@@ -74,6 +78,9 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
           >
             <Pencil /> Correct
           </Link>
+          {w.status === "completed" && (
+            <ShareWorkout workoutId={w.id} hasProfile={social !== null} post={post} />
+          )}
         </div>
       </div>
 

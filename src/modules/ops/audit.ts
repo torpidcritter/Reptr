@@ -16,6 +16,12 @@ export const auditLabels = {
   program_ended: "Ended a training block",
   workout_corrected: "Corrected a finished workout",
   workout_deleted: "Deleted a finished workout",
+  social_profile_created: "Set up your social profile",
+  social_profile_updated: "Changed your social profile",
+  social_profile_deleted: "Left social features",
+  user_blocked: "Blocked someone",
+  workout_shared: "Shared a workout",
+  report_made: "Reported something",
 } as const;
 
 export type AuditAction = keyof typeof auditLabels;
