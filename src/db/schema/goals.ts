@@ -24,6 +24,8 @@ export const goals = pgTable(
   },
   (t) => [
     index("goals_user_idx").on(t.userId),
+    // Deleting a custom exercise cascades here.
+    index("goals_exercise_idx").on(t.exerciseId),
     check(
       "goals_strength_has_exercise",
       sql`(${t.kind} = 'strength') = (${t.exerciseId} is not null)`,

@@ -1,3 +1,4 @@
+import { discardWorkout } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 import { otherUserId } from "./env";
 
@@ -52,11 +53,7 @@ test("another account on the same browser never sees this account's workout", as
   await page.goto("/workout");
   await expect(page.getByLabel("Weight").first()).toHaveValue("30");
 
-  await page.getByRole("button", { name: "Discard workout" }).click();
-  await page
-    .getByRole("dialog", { name: "Discard this workout?" })
-    .getByRole("button", { name: "Discard" })
-    .click();
+  await discardWorkout(page);
 });
 
 test("sets logged offline after the workout was finished elsewhere are kept and saved", async ({
@@ -87,6 +84,11 @@ test("sets logged offline after the workout was finished elsewhere are kept and 
     .getByRole("button", { name: "Finish" })
     .click();
   await laptop.waitForURL(/\/history\/[0-9a-f-]{36}/);
+  // Once the server has the finish, the laptop lets its copy go and has nothing active.
+  await laptop.goto("/workout");
+  await expect(laptop.getByRole("button", { name: "Start empty workout" })).toBeVisible({
+    timeout: 15_000,
+  });
   await laptopContext.close();
 
   // Back online, the phone keeps the set and says so instead of dropping it.

@@ -267,9 +267,22 @@ export const useWorkoutStore = create<State & Actions>()(
   ),
 );
 
-registerAccountStore(useWorkoutStore, () =>
-  useWorkoutStore.setState({ ...empty, hydrated: false }),
+registerAccountStore(
+  useWorkoutStore,
+  () => useWorkoutStore.setState({ ...empty, hydrated: false }),
+  ({ workout }) => workout == null || isWorkoutShape(workout),
 );
+
+/** Enough of a workout's shape that the logger can open it without crashing. */
+export function isWorkoutShape(w: unknown): w is WorkoutSnapshot {
+  if (!w || typeof w !== "object") return false;
+  const x = w as Partial<WorkoutSnapshot>;
+  return (
+    typeof x.id === "string" &&
+    Array.isArray(x.exercises) &&
+    x.exercises.every((e) => e && typeof e.id === "string" && Array.isArray(e.sets))
+  );
+}
 
 /** True while this device holds changes the server hasn't confirmed. */
 export function hasUnsyncedWorkout() {

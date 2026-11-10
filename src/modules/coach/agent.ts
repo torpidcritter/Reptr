@@ -1,3 +1,4 @@
+import { capToolResult, coachLimits, trimHistory, type Usage } from "./budget";
 import { type CoachContext, type Proposal, runTool, toolDefinitions } from "./tools";
 
 /** The part of the OpenAI client the coach uses, so tests can pass a fake. */
@@ -9,7 +10,11 @@ export type ChatClient = {
         messages: ChatMessage[];
         tools: ReturnType<typeof toolDefinitions>;
         temperature?: number;
-      }) => Promise<{ choices: { message: AssistantMessage }[] }>;
+        max_completion_tokens?: number;
+      }) => Promise<{
+        choices: { message: AssistantMessage }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+      }>;
     };
   };
 };
@@ -47,32 +52,51 @@ How you work:
 
 const MAX_STEPS = 6;
 
-/** Runs one user turn: lets the model call tools until it answers, collecting proposals. */
+export class CoachTimeoutError extends Error {}
+
+/**
+ * Runs one user turn: lets the model call tools until it answers, collecting proposals.
+ * Bounded on every side: the history sent, each reply's length, each tool result's size,
+ * the number of steps and the total time. Token usage is returned even on failure.
+ */
 export async function runCoach(
   client: ChatClient,
   model: string,
   ctx: CoachContext,
   system: string,
   history: Turn[],
+  limits = coachLimits(),
 ) {
-  const messages: ChatMessage[] = [{ role: "system", content: system }, ...history.slice(-20)];
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    ...trimHistory(history, limits),
+  ];
   const proposals: Proposal[] = [];
   const toolsUsed: string[] = [];
   const definitions = toolDefinitions();
+  const usage: Usage = { promptTokens: 0, completionTokens: 0 };
+  const deadline = Date.now() + limits.answerDeadlineMs;
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    if (Date.now() > deadline)
+      throw Object.assign(new CoachTimeoutError("Coach took too long"), { usage });
     const res = await client.chat.completions.create({
       model,
       messages,
       tools: definitions,
       temperature: 0.4,
+      max_completion_tokens: limits.maxOutputTokens,
     });
+    usage.promptTokens += res.usage?.prompt_tokens ?? 0;
+    usage.completionTokens += res.usage?.completion_tokens ?? 0;
     const msg = res.choices[0].message;
     if (!msg.tool_calls?.length) {
       return {
         reply: msg.content?.trim() || "Sorry, I couldn't come up with an answer.",
         proposals,
         toolsUsed,
+        usage,
+        outcome: "answered" as const,
       };
     }
     messages.push({ role: "assistant", content: msg.content, tool_calls: msg.tool_calls });
@@ -85,12 +109,18 @@ export async function runCoach(
         out = { result: { error: "That lookup failed. Try a different question." } };
       }
       if (out.proposal) proposals.push(out.proposal);
-      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out.result) });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: capToolResult(JSON.stringify(out.result), limits.toolResultChars),
+      });
     }
   }
   return {
     reply: "That took more steps than I allow for one answer. Could you ask something narrower?",
     proposals,
     toolsUsed,
+    usage,
+    outcome: "too_many_steps" as const,
   };
 }

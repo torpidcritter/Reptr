@@ -75,6 +75,8 @@ export const routineExercises = pgTable(
       foreignColumns: [routines.id, routines.userId],
     }).onDelete("cascade"),
     unique("routine_exercises_position_key").on(t.routineId, t.position),
+    // Account deletion cascades from auth.users by user id.
+    index("routine_exercises_user_idx").on(t.userId),
     check(
       "routine_exercises_reps_range",
       sql`${t.targetRepsMin} is null or ${t.targetRepsMax} is null or ${t.targetRepsMin} <= ${t.targetRepsMax}`,
@@ -113,6 +115,8 @@ export const workouts = pgTable(
       foreignColumns: [routines.id],
     }).onDelete("set null"),
     index("workouts_user_started_idx").on(t.userId, t.startedAt.desc()),
+    // Deleting a routine sets this to null on its workouts.
+    index("workouts_routine_idx").on(t.routineId),
     // Only one workout can be in progress at a time.
     uniqueIndex("workouts_one_in_progress_idx")
       .on(t.userId)
@@ -186,6 +190,8 @@ export const workoutSets = pgTable(
       foreignColumns: [workoutExercises.id, workoutExercises.userId],
     }).onDelete("cascade"),
     unique("workout_sets_number_key").on(t.workoutExerciseId, t.setNumber),
+    // Account deletion cascades from auth.users by user id.
+    index("workout_sets_user_idx").on(t.userId),
     check("workout_sets_set_number_positive", sql`${t.setNumber} >= 1`),
     check(
       "workout_sets_weight_range",
@@ -225,6 +231,10 @@ export const personalRecords = pgTable(
   },
   (t) => [
     index("personal_records_lookup_idx").on(t.userId, t.exerciseId, t.type, t.achievedAt.desc()),
+    // Every delete of a set (each in-progress save, every correction) checks this FK.
+    index("personal_records_set_idx").on(t.setId),
+    // Deleting a custom exercise cascades here.
+    index("personal_records_exercise_idx").on(t.exerciseId),
     ownerPolicy("personal_records", t.userId),
   ],
 );

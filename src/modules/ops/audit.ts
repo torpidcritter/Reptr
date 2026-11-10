@@ -14,6 +14,8 @@ export const auditLabels = {
   memory_deleted: "Deleted a coach memory",
   program_started: "Started a training block",
   program_ended: "Ended a training block",
+  workout_corrected: "Corrected a finished workout",
+  workout_deleted: "Deleted a finished workout",
 } as const;
 
 export type AuditAction = keyof typeof auditLabels;

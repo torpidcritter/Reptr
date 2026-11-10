@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, GitCompareArrows, Repeat, Trophy } from "lucide-react";
+import { ArrowLeft, Bot, GitCompareArrows, Pencil, Repeat, Trophy } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -67,6 +67,12 @@ async function Summary({ params }: Pick<PageProps<"/history/[id]">, "params">) {
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <Repeat /> Repeat
+          </Link>
+          <Link
+            href={`/history/${w.id}/edit`}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <Pencil /> Correct
           </Link>
         </div>
       </div>

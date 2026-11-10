@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
+import { timed } from "@/lib/log";
 import { applyOp, opPaths, opSchema, pruneAppliedOps } from "@/modules/ops/outbox";
 import type { SyncFailure } from "@/modules/sync/errors";
 import { failure } from "@/modules/sync/server";
@@ -27,7 +28,7 @@ export async function applyOpAction(op: unknown, owner?: string): Promise<OpResu
   const busy = await overLimit(user.id, "write");
   if (busy) return { ok: false, kind: "rate_limited", error: busy };
   try {
-    await applyOp(db, user.id, parsed.data);
+    await timed("outbox_op", () => applyOp(db, user.id, parsed.data));
   } catch (e) {
     return failure("outbox_op_failed", e);
   }

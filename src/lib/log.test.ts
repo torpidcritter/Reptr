@@ -21,3 +21,13 @@ describe("structured log", () => {
     });
   });
 });
+
+describe("alerts", async () => {
+  const { shouldAlert } = await import("./log");
+  it("sends the same error at most once a minute", () => {
+    expect(shouldAlert("db_down", 1_000_000)).toBe(true);
+    expect(shouldAlert("db_down", 1_030_000)).toBe(false);
+    expect(shouldAlert("other_event", 1_030_000)).toBe(true);
+    expect(shouldAlert("db_down", 1_061_000)).toBe(true);
+  });
+});

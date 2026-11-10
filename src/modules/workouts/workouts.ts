@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { exercises, workoutExercises, workouts, workoutSets } from "@/db/schema";
+import { exercises, routines, workoutExercises, workouts, workoutSets } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { recordPersonalRecords } from "@/modules/analytics/records";
 import { mergeWorkouts } from "./merge";
@@ -55,21 +55,7 @@ export async function saveWorkoutSnapshot(
   sync?: SyncInfo,
 ) {
   let w = incoming;
-  const ids = [
-    ...new Set(w.exercises.flatMap((e) => [e.exerciseId, e.substitutedFromId ?? e.exerciseId])),
-  ];
-  if (ids.length) {
-    const visible = await db
-      .select({ id: exercises.id })
-      .from(exercises)
-      .where(
-        and(
-          inArray(exercises.id, ids),
-          or(isNull(exercises.ownerId), eq(exercises.ownerId, userId)),
-        ),
-      );
-    if (visible.length !== ids.length) throw new WorkoutValidationError("Unknown exercise");
-  }
+  await assertExercisesVisible(db, userId, w);
 
   return db.transaction(async (tx) => {
     const [existing] = await tx.select().from(workouts).where(eq(workouts.id, w.id)).for("update");
@@ -145,7 +131,8 @@ export async function saveWorkoutSnapshot(
     const row = {
       plannedSets: w.exercises.reduce((n, e) => n + e.sets.length, 0),
       name: w.name,
-      routineId: w.routineId,
+      // Only a routine of this user's can be linked (a guessed id is dropped).
+      routineId: await ownRoutineId(tx, userId, w.routineId),
       status: w.status,
       startedAt: new Date(w.startedAt),
       finishedAt,
@@ -158,46 +145,9 @@ export async function saveWorkoutSnapshot(
       .values({ id: w.id, userId, ...row })
       .onConflictDoUpdate({ target: workouts.id, set: row });
 
-    await tx.delete(workoutExercises).where(eq(workoutExercises.workoutId, w.id));
-
     // A finished workout keeps only the sets that were done, and the exercises that have any.
-    const kept = w.exercises
-      .map((e) => ({ ...e, sets: finishing ? e.sets.filter((s) => s.completedAt) : e.sets }))
-      .filter((e) => !finishing || e.sets.length > 0);
-
-    if (kept.length) {
-      await tx.insert(workoutExercises).values(
-        kept.map((e, i) => ({
-          id: e.id,
-          userId,
-          workoutId: w.id,
-          exerciseId: e.exerciseId,
-          position: i + 1,
-          supersetGroup: e.supersetGroup,
-          substitutedFromId: e.substitutedFromId,
-          notes: e.notes,
-        })),
-      );
-      const sets = kept.flatMap((e) =>
-        e.sets.map((s, i) => ({
-          id: s.id,
-          userId,
-          workoutExerciseId: e.id,
-          setNumber: i + 1,
-          type: s.type,
-          weightKg: s.weightKg,
-          reps: s.reps,
-          durationSeconds: s.durationSeconds,
-          distanceMeters: s.distanceMeters,
-          rpe: s.rpe,
-          rir: s.rir ?? null,
-          tempo: s.tempo ?? null,
-          notes: s.note ?? null,
-          completedAt: s.completedAt ? new Date(s.completedAt) : null,
-        })),
-      );
-      if (sets.length) await tx.insert(workoutSets).values(sets);
-    }
+    const kept = keepDone(w.exercises, finishing);
+    await replaceContents(tx, userId, w.id, kept);
     if (w.status === "completed") await recordPersonalRecords(tx, userId, finishedAt!, kept);
     return { status: w.status, version, merged, alreadyFinished: false };
   });
@@ -238,6 +188,83 @@ async function endInProgress(tx: Tx, userId: string, row: typeof workouts.$infer
   const empty = snap.exercises.filter((e) => !e.sets.some((s) => s.completedAt)).map((e) => e.id);
   if (empty.length) await db.delete(workoutExercises).where(inArray(workoutExercises.id, empty));
   await recordPersonalRecords(tx, userId, finishedAt, kept);
+}
+
+/** A finished workout keeps only the sets that were done, and the exercises that have any. */
+export function keepDone(list: ExerciseSnapshot[], finishing: boolean) {
+  return list
+    .map((e) => ({ ...e, sets: finishing ? e.sets.filter((s) => s.completedAt) : e.sets }))
+    .filter((e) => !finishing || e.sets.length > 0);
+}
+
+/** Replaces a workout's exercises and sets with the given ones. */
+export async function replaceContents(
+  tx: Tx,
+  userId: string,
+  workoutId: string,
+  kept: ExerciseSnapshot[],
+) {
+  await tx.delete(workoutExercises).where(eq(workoutExercises.workoutId, workoutId));
+  if (!kept.length) return;
+  await tx.insert(workoutExercises).values(
+    kept.map((e, i) => ({
+      id: e.id,
+      userId,
+      workoutId,
+      exerciseId: e.exerciseId,
+      position: i + 1,
+      supersetGroup: e.supersetGroup,
+      substitutedFromId: e.substitutedFromId,
+      notes: e.notes,
+    })),
+  );
+  const sets = kept.flatMap((e) =>
+    e.sets.map((s, i) => ({
+      id: s.id,
+      userId,
+      workoutExerciseId: e.id,
+      setNumber: i + 1,
+      type: s.type,
+      weightKg: s.weightKg,
+      reps: s.reps,
+      durationSeconds: s.durationSeconds,
+      distanceMeters: s.distanceMeters,
+      rpe: s.rpe,
+      rir: s.rir ?? null,
+      tempo: s.tempo ?? null,
+      notes: s.note ?? null,
+      completedAt: s.completedAt ? new Date(s.completedAt) : null,
+    })),
+  );
+  if (sets.length) await tx.insert(workoutSets).values(sets);
+}
+
+async function ownRoutineId(tx: Tx, userId: string, routineId: string | null) {
+  if (!routineId) return null;
+  const [r] = await tx
+    .select({ id: routines.id })
+    .from(routines)
+    .where(and(eq(routines.id, routineId), eq(routines.userId, userId)));
+  return r?.id ?? null;
+}
+
+/** Checks every exercise is one this user may use (a shared one, or their own). */
+export async function assertExercisesVisible(
+  db: Database | Tx,
+  userId: string,
+  w: WorkoutSnapshot,
+) {
+  const ids = [
+    ...new Set(w.exercises.flatMap((e) => [e.exerciseId, e.substitutedFromId ?? e.exerciseId])),
+  ];
+  if (!ids.length) return;
+  const visible = await db
+    .select({ id: exercises.id })
+    .from(exercises)
+    .where(
+      and(inArray(exercises.id, ids), or(isNull(exercises.ownerId), eq(exercises.ownerId, userId))),
+    );
+  if (visible.length !== ids.length) throw new WorkoutValidationError("Unknown exercise");
 }
 
 /** The workout in progress on the server, if any, as a snapshot (for resuming on another device). */

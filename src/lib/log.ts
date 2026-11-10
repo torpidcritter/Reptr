@@ -1,6 +1,8 @@
 // Structured server logs: one JSON object per line, which Vercel and most log tools can
 // search and filter. Secrets and contact details are masked before anything is written.
 
+import { after } from "next/server";
+
 type Level = "info" | "warn" | "error";
 type Fields = Record<string, unknown>;
 
@@ -33,20 +35,57 @@ export function formatLine(level: Level, event: string, fields: Fields = {}) {
   });
 }
 
+/** Same event reported at most once a minute per server instance, so an outage is one alert, not hundreds. */
+const ALERT_EVERY_MS = 60_000;
+const lastAlert = new Map<string, number>();
+
+export function shouldAlert(event: string, now = Date.now()) {
+  const last = lastAlert.get(event) ?? 0;
+  if (now - last < ALERT_EVERY_MS) return false;
+  lastAlert.set(event, now);
+  return true;
+}
+
 /**
  * Errors are also sent to ERROR_WEBHOOK_URL when it's set (any endpoint that takes a JSON
- * POST, such as a Slack or Discord webhook or an error tracker's ingest URL).
+ * POST: a Slack or Discord webhook, or an error tracker's ingest URL). The send is handed
+ * to Next's after(), so a serverless function isn't frozen before it finishes; outside a
+ * request it's sent directly. Delivery failures are written to the log.
  */
-function report(line: string) {
+function report(event: string, line: string) {
   const url = process.env.ERROR_WEBHOOK_URL;
-  if (!url) return;
+  if (!url || !shouldAlert(event)) return;
   const text = line.length > 3500 ? `${line.slice(0, 3500)}…` : line;
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, content: text }),
-    signal: AbortSignal.timeout(3000),
-  }).catch(() => {});
+  const send = () =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, content: text }),
+      signal: AbortSignal.timeout(5000),
+    })
+      .then((res) => {
+        if (!res.ok) console.warn(formatLine("warn", "alert_rejected", { status: res.status }));
+      })
+      .catch((err) => console.warn(formatLine("warn", "alert_failed", { err })));
+  try {
+    after(send);
+  } catch {
+    void send();
+  }
+}
+
+/**
+ * Runs a piece of server work and logs it as slow when it takes longer than expected,
+ * with its name and duration, so slow actions show up in the logs and alerts.
+ */
+export async function timed<T>(name: string, fn: () => Promise<T>, slowMs = 2000): Promise<T> {
+  const start = performance.now();
+  try {
+    return await fn();
+  } finally {
+    const ms = Math.round(performance.now() - start);
+    if (ms > slowMs) console.warn(formatLine("warn", "slow_request", { name, ms }));
+  }
 }
 
 export const log = {
@@ -55,6 +94,6 @@ export const log = {
   error: (event: string, fields?: Fields) => {
     const line = formatLine("error", event, fields);
     console.error(line);
-    report(line);
+    report(event, line);
   },
 };
