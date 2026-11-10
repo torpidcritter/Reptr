@@ -176,7 +176,7 @@ export async function confirmProposalAction(
       day: p.data.payload.day,
       values: { weight: p.data.payload.weightKg },
     });
-    await logEntry(db, user.id, entry);
+    await logEntry(db, user.id, entry, await getTimeZone());
     revalidatePath("/physique");
     revalidatePath("/");
     return { done: "Weight logged." };

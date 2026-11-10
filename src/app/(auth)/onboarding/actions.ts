@@ -31,10 +31,9 @@ export async function completeOnboarding(
   await saveProfile(user.id, profile);
   // The weight they gave becomes their first weigh-in, dated today where they are.
   if (weightKg) {
-    const day = new Intl.DateTimeFormat("en-CA", { timeZone: await getTimeZone() }).format(
-      new Date(),
-    );
-    await logEntry(db, user.id, { day, values: { weight: weightKg }, bodyFatMethod: null });
+    const tz = await getTimeZone();
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+    await logEntry(db, user.id, { day, values: { weight: weightKg }, bodyFatMethod: null }, tz);
   }
   redirect("/");
 }

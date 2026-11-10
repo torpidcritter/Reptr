@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { check, date, index, numeric, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  check,
+  date,
+  index,
+  numeric,
+  pgTable,
+  text,
+  time,
+  timestamp,
+  unique,
+} from "drizzle-orm/pg-core";
 import { createdAt, id, ownerPolicy, updatedAt, userId } from "./helpers";
 import { bodyMetricType, photoPose } from "./enums";
 
@@ -13,12 +23,22 @@ export const bodyMetrics = pgTable(
     value: numeric("value", { precision: 7, scale: 2, mode: "number" }).notNull(),
     /** How body fat was measured (scale, calipers, DEXA, visual). Methods aren't interchangeable. */
     method: text("method"),
+    /**
+     * The real instant of the reading. Readings saved before recorded_on existed hold the
+     * person's wall-clock time as if it were UTC; recorded_on/recorded_time are right for
+     * all rows, so use those for days and display.
+     */
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The person's own calendar day for the reading. */
+    recordedOn: date("recorded_on").notNull(),
+    /** The person's wall-clock time, when they gave one. */
+    recordedTime: time("recorded_time"),
     notes: text("notes"),
     createdAt: createdAt(),
   },
   (t) => [
     index("body_metrics_user_type_idx").on(t.userId, t.type, t.recordedAt.desc()),
+    index("body_metrics_user_type_day_idx").on(t.userId, t.type, t.recordedOn.desc()),
     check("body_metrics_value_positive", sql`${t.value} > 0`),
     check(
       "body_metrics_body_fat_range",

@@ -60,7 +60,16 @@ checks the same thing with a signed-in user.
 
 ## RLS coverage
 
-Every user table has an owner policy (`<table>_owner_all`), shared reference data has a
-read policy, and server-only tables (`rate_limits`, `applied_ops`) have none, so the
-`authenticated` role can't touch them. `src/db/rls.test.ts` fails if a new table is
-added without RLS enabled.
+Every user table has an owner policy (`<table>_owner_all`, including `applied_ops`),
+shared reference data has a read policy, the audit log and coach usage are read-only to
+their owner, and `rate_limits` has no policy, so the `authenticated` role can't touch
+it. `src/db/rls.test.ts` fails if a new table is added without RLS enabled, or a new
+foreign key without an index.
+
+Beyond RLS, the database itself refuses (for every connection, including the owner):
+
+- a workout linked to another person's routine (composite foreign key, migration 0023);
+- a routine, workout, record or goal that uses another person's private exercise
+  (trigger `exercise_visible_to_owner`, migration 0023);
+- a progress photo upload past the per-person limit (storage insert policy,
+  migration 0024; applies on Supabase only).

@@ -77,6 +77,8 @@ export const routineExercises = pgTable(
     unique("routine_exercises_position_key").on(t.routineId, t.position),
     // Account deletion cascades from auth.users by user id.
     index("routine_exercises_user_idx").on(t.userId),
+    // Deleting a custom exercise checks these references.
+    index("routine_exercises_exercise_idx").on(t.exerciseId),
     check(
       "routine_exercises_reps_range",
       sql`${t.targetRepsMin} is null or ${t.targetRepsMax} is null or ${t.targetRepsMin} <= ${t.targetRepsMax}`,
@@ -109,6 +111,9 @@ export const workouts = pgTable(
   },
   (t) => [
     unique("workouts_id_user_key").on(t.id, t.userId),
+    // In the database this is (routine_id, user_id) -> routines (id, user_id) with
+    // ON DELETE SET NULL (routine_id), so a workout can only link its owner's routine.
+    // Drizzle can't express a column list on SET NULL; see migration 0023.
     foreignKey({
       name: "workouts_routine_fk",
       columns: [t.routineId],
@@ -156,6 +161,9 @@ export const workoutExercises = pgTable(
     }).onDelete("cascade"),
     unique("workout_exercises_position_key").on(t.workoutId, t.position),
     index("workout_exercises_exercise_idx").on(t.userId, t.exerciseId),
+    // Deleting a custom exercise checks both references by exercise id alone.
+    index("workout_exercises_exercise_only_idx").on(t.exerciseId),
+    index("workout_exercises_substituted_idx").on(t.substitutedFromId),
     ownerPolicy("workout_exercises", t.userId),
   ],
 );

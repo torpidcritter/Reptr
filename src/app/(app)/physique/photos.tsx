@@ -5,7 +5,7 @@ import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { photoBucket } from "@/modules/body/metrics";
+import { PHOTO_LIMIT, photoBucket, photoLimitMessage } from "@/modules/body/metrics";
 import { addPhotoAction, deletePhotoAction } from "./actions";
 import { useConfirm } from "@/components/ui/confirm";
 
@@ -57,6 +57,8 @@ export function Photos({
     start(async () => {
       try {
         setError(null);
+        // Storage refuses uploads past the limit too; this just says why up front.
+        if (photos.length >= PHOTO_LIMIT) throw new Error(photoLimitMessage);
         const blob = await shrink(file);
         const path = `${userId}/${crypto.randomUUID()}.jpg`;
         const { error: upErr } = await createSupabaseBrowserClient()

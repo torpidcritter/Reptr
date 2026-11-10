@@ -28,7 +28,9 @@ describe.skipIf(!testDatabaseUrl)("row-level security through withUser", () => {
       { userId: a, name: "A's session", status: "active" },
       { userId: b, name: "B's session", status: "active" },
     ]);
-    await t.db.insert(bodyMetrics).values({ userId: b, type: "weight", value: 80 });
+    await t.db
+      .insert(bodyMetrics)
+      .values({ userId: b, type: "weight", value: 80, recordedOn: "2026-11-01" });
   });
   afterAll(() => t?.close());
 

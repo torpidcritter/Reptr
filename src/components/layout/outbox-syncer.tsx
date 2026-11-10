@@ -8,6 +8,7 @@ import { currentAccount } from "@/lib/device/scope";
 import { syncPaused } from "@/lib/device/session";
 import { isLeader, useTabRole } from "@/lib/device/tabs";
 import { mutateOutbox, opOf, useOutbox } from "@/lib/outbox";
+import { tooOldToSend } from "@/modules/ops/retention";
 import { classifyThrown, isRetryable, needsPerson, syncMessage } from "@/modules/sync/errors";
 
 /**
@@ -38,6 +39,16 @@ export function OutboxSyncer() {
         while (!syncPaused()) {
           const next = useOutbox.getState().ops[0];
           if (!next) break;
+          if (tooOldToSend(next.queuedAt)) {
+            await mutateOutbox((s) =>
+              s.fail(
+                next.id,
+                "validation",
+                "it was saved on this device over a year ago. Check it isn't already in Reptr before sending it.",
+              ),
+            );
+            continue;
+          }
           if (next.notBefore && next.notBefore > Date.now()) {
             schedule(next.notBefore - Date.now());
             return;
