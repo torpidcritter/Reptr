@@ -43,6 +43,7 @@ async function Settings() {
             bio: mine?.bio ?? "",
             visibility: mine?.visibility ?? "private",
             discoverable: mine?.discoverable ?? true,
+            leaderboards: mine?.leaderboards ?? true,
           }}
         />
       </Card>

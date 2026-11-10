@@ -13,6 +13,7 @@ import {
 } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { withUser } from "@/db/with-user";
+import { notify } from "@/modules/community/notifications";
 import { recordsForWorkout } from "@/modules/analytics/records";
 import { getWorkout } from "@/modules/workouts/workouts";
 import { buildSummary, type WorkoutSummary } from "./summary";
@@ -24,7 +25,7 @@ import { buildSummary, type WorkoutSummary } from "./summary";
 export class SocialError extends Error {}
 
 /** Postgres refused because of a row-level security policy. */
-const refused = (e: unknown) => {
+export const refused = (e: unknown) => {
   const err = e as { code?: string; cause?: { code?: string } };
   return err.code === "42501" || err.cause?.code === "42501";
 };
@@ -65,6 +66,8 @@ export const profileSchema = z.object({
   bio: z.string().trim().max(160, "Keep your bio under 160 characters.").default(""),
   visibility: z.enum(["public", "private"]),
   discoverable: z.boolean().default(true),
+  /** Left out: unchanged (off for a new profile). */
+  leaderboards: z.boolean().optional(),
 });
 export type ProfileInput = z.input<typeof profileSchema>;
 
@@ -103,6 +106,7 @@ export async function saveProfile(db: Database, me: string, input: ProfileInput)
         bio: p.bio || null,
         visibility: p.visibility,
         discoverable: p.discoverable,
+        ...(p.leaderboards === undefined ? {} : { leaderboards: p.leaderboards }),
       };
       await tx
         .insert(socialProfiles)
@@ -250,8 +254,9 @@ export async function suggestions(db: Database, me: string, limit = 8) {
 /** Follows a public account, or asks to follow a private one. */
 export async function follow(db: Database, me: string, target: string) {
   if (target === me) throw new SocialError("You can't follow yourself.");
+  let state: "following" | "requested";
   try {
-    return await withUser(db, me, async (tx) => {
+    state = await withUser(db, me, async (tx) => {
       const [card] = await tx.execute<{ visibility: string }>(
         sql`select visibility from public.profile_cards where user_id = ${target}`,
       );
@@ -273,6 +278,14 @@ export async function follow(db: Database, me: string, target: string) {
     if (refused(e)) throw new SocialError("You can't follow this account.");
     throw e;
   }
+  await notify(
+    db,
+    target,
+    state === "following"
+      ? { kind: "follow", actorId: me, dedupeKey: `follow:${me}` }
+      : { kind: "follow_request", actorId: me, dedupeKey: `request:${me}` },
+  );
+  return state;
 }
 
 /** Stops following, or withdraws a request. */
@@ -308,6 +321,11 @@ export async function acceptRequest(db: Database, me: string, requester: string)
     if (refused(e)) throw new SocialError("That request was withdrawn.");
     throw e;
   }
+  await notify(db, requester, {
+    kind: "follow_accepted",
+    actorId: me,
+    dedupeKey: `accepted:${me}`,
+  });
 }
 
 export async function declineRequest(db: Database, me: string, requester: string) {
@@ -613,13 +631,27 @@ export async function getPost(db: Database, me: string, postId: string) {
 }
 
 export async function like(db: Database, me: string, postId: string) {
+  let author: string | undefined;
   try {
-    await withUser(db, me, (tx) =>
-      tx.insert(postLikes).values({ postId, userId: me }).onConflictDoNothing(),
-    );
+    author = await withUser(db, me, async (tx) => {
+      await tx.insert(postLikes).values({ postId, userId: me }).onConflictDoNothing();
+      const [p] = await tx
+        .select({ authorId: posts.authorId })
+        .from(posts)
+        .where(eq(posts.id, postId));
+      return p?.authorId;
+    });
   } catch (e) {
     if (refused(e)) throw new SocialError("That post isn't available.");
     throw e;
+  }
+  if (author) {
+    await notify(db, author, {
+      kind: "like",
+      actorId: me,
+      postId,
+      dedupeKey: `like:${postId}:${me}`,
+    });
   }
 }
 
@@ -643,13 +675,29 @@ export async function addComment(db: Database, me: string, input: z.input<typeof
   const c = commentSchema.parse(input);
   if (!(await myProfile(db, me))) throw new SocialError("Set up your profile before commenting.");
   try {
-    return await withUser(db, me, async (tx) => {
+    const added = await withUser(db, me, async (tx) => {
       const [row] = await tx
         .insert(comments)
         .values({ postId: c.postId, parentId: c.parentId, authorId: me, body: c.body })
         .returning({ id: comments.id });
-      return row.id;
+      const [p] = await tx
+        .select({ authorId: posts.authorId })
+        .from(posts)
+        .where(eq(posts.id, c.postId));
+      const [parent] = c.parentId
+        ? await tx
+            .select({ authorId: comments.authorId })
+            .from(comments)
+            .where(eq(comments.id, c.parentId))
+        : [];
+      return { id: row.id, postAuthor: p?.authorId, parentAuthor: parent?.authorId };
     });
+    const ref = { actorId: me, postId: c.postId, commentId: added.id };
+    if (added.parentAuthor) await notify(db, added.parentAuthor, { kind: "reply", ...ref });
+    if (added.postAuthor && added.postAuthor !== added.parentAuthor) {
+      await notify(db, added.postAuthor, { kind: "comment", ...ref });
+    }
+    return added.id;
   } catch (e) {
     if (refused(e)) throw new SocialError("You can't comment on this post.");
     throw e;

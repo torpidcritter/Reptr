@@ -1,4 +1,12 @@
-import { ChevronRight, History, Library, ListChecks, Play } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronRight,
+  History,
+  Library,
+  ListChecks,
+  Play,
+  TrendingUp,
+} from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ComponentType } from "react";
@@ -6,7 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "Train" };
+export const metadata: Metadata = { title: "Workouts" };
 
 function NavCard({
   href,
@@ -38,7 +46,7 @@ function NavCard({
 export default function Page() {
   return (
     <>
-      <PageHeader title="Train" />
+      <PageHeader title="Workouts" />
       <Link href="/workout" className={buttonVariants({ size: "lg", className: "mb-6 w-full" })}>
         <Play /> Start workout
       </Link>
@@ -60,6 +68,18 @@ export default function Page() {
           icon={History}
           title="Workout history"
           body="Every finished workout, newest first"
+        />
+        <NavCard
+          href="/progress"
+          icon={TrendingUp}
+          title="Progress"
+          body="Records, strength trends and insights"
+        />
+        <NavCard
+          href="/plan"
+          icon={CalendarDays}
+          title="Plan"
+          body="Your training week, programs and goals"
         />
       </div>
     </>

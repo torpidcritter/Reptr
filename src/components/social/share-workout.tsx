@@ -60,20 +60,22 @@ export function ShareWorkout({
       router.refresh();
     });
 
-  const remove = () =>
+  const remove = async () => {
+    if (!post) return;
+    // Asked outside the transition, so the dialog shows straight away.
+    const ok = await confirm({
+      title: "Remove this post?",
+      body: "Its likes and comments go too. The workout itself stays in your history.",
+      confirm: "Remove",
+    });
+    if (!ok) return;
     start(async () => {
-      if (!post) return;
-      const ok = await confirm({
-        title: "Remove this post?",
-        body: "Its likes and comments go too. The workout itself stays in your history.",
-        confirm: "Remove",
-      });
-      if (!ok) return;
       const res = await deletePostAction(post.id);
       if (res.error) return setError(res.error);
       setOpen(false);
       router.refresh();
     });
+  };
 
   return (
     <>

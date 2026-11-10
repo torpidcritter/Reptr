@@ -143,11 +143,11 @@ test("@phone the bottom bar reaches every section", async ({ page }) => {
   await page.goto("/");
   const bar = page.getByRole("navigation").last();
   for (const [name, path] of [
-    ["Train", "/train"],
+    ["Workouts", "/train"],
     ["Social", "/social"],
-    ["Progress", "/progress"],
-    ["Plan", "/plan"],
-    ["Coach", "/coach"],
+    ["Leaderboards", "/leaderboards"],
+    ["Challenges", "/challenges"],
+    ["Profile", "/profile"],
   ]) {
     await bar.getByRole("link", { name, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
@@ -156,8 +156,18 @@ test("@phone the bottom bar reaches every section", async ({ page }) => {
       "page",
     );
   }
-  // In dev mode the Next.js tools button covers the Today tab, so check its link instead of clicking.
-  await expect(bar.getByRole("link", { name: "Today", exact: true })).toHaveAttribute("href", "/");
-  await page.getByRole("link", { name: "Profile and settings" }).click();
-  await expect(page).toHaveURL(/\/profile$/);
+  // In dev mode the Next.js tools button covers the Home tab, so check its link instead of clicking.
+  await expect(bar.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("href", "/");
+  // What used to be tabs is one tap in: progress and plan from Workouts, coach from Home.
+  await bar.getByRole("link", { name: "Workouts", exact: true }).click();
+  await page.getByRole("link", { name: /Progress/ }).click();
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(bar.getByRole("link", { name: "Workouts", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /^Notifications/ })).toBeVisible();
+  await page.getByRole("link", { name: "Ask the coach" }).first().click();
+  await expect(page).toHaveURL(/\/coach$/);
 });

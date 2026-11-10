@@ -11,3 +11,6 @@ export const e2ePort = Number(process.env.E2E_PORT ?? 3200);
 export const freshUserId = "00000000-0000-4000-8000-0000000000f1";
 /** A second person with their own workout, to check users can't see each other's data. */
 export const otherUserId = "00000000-0000-4000-8000-0000000000b2";
+/** Two people for groups, challenges and leaderboards. Kim has one finished workout. */
+export const kimUserId = "00000000-0000-4000-8000-0000000000c1";
+export const leeUserId = "00000000-0000-4000-8000-0000000000c2";

@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 import { seed } from "../src/db/seed/seed";
-import { e2eDatabaseUrl, e2eUserId, freshUserId, otherUserId } from "./env";
+import { e2eDatabaseUrl, e2eUserId, freshUserId, kimUserId, leeUserId, otherUserId } from "./env";
 
 /** A fresh database with the exercise library and one onboarded user. */
 export default async function globalSetup() {
@@ -31,6 +31,23 @@ export default async function globalSetup() {
             values (${otherUserId}, 'Robin private session', 'completed', now() - interval '1 day', now() - interval '23 hours')`;
   await sql`insert into body_metrics (user_id, type, value, recorded_at, recorded_on)
             values (${otherUserId}, 'weight', 111.1, now() - interval '1 day', current_date - 1)`;
+  // Kim and Lee: onboarded, no social profile yet. Kim has a 45-minute bench workout.
+  await sql`insert into auth.users (id, email) values (${kimUserId}, 'kim@test'), (${leeUserId}, 'lee@test')`;
+  for (const [id, name] of [
+    [kimUserId, "Kim"],
+    [leeUserId, "Lee"],
+  ]) {
+    await sql`insert into profiles (user_id, display_name, onboarded_at) values (${id}, ${name}, now())
+              on conflict (user_id) do update set display_name = ${name}, onboarded_at = now()`;
+  }
+  const [w] = await sql`insert into workouts (user_id, name, status, started_at, finished_at)
+    values (${kimUserId}, 'Kim bench', 'completed', now() - interval '50 minutes', now() - interval '5 minutes')
+    returning id`;
+  const [we] = await sql`insert into workout_exercises (user_id, workout_id, exercise_id, position)
+    select ${kimUserId}, ${w.id}, id, 0 from exercises where slug = 'barbell-bench-press' returning id`;
+  await sql`insert into workout_sets (user_id, workout_exercise_id, set_number, weight_kg, reps, completed_at)
+    values (${kimUserId}, ${we.id}, 1, 60, 8, now() - interval '30 minutes'),
+           (${kimUserId}, ${we.id}, 2, 60, 8, now() - interval '25 minutes')`;
   await sql.end();
 }
 

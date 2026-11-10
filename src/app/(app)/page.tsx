@@ -1,14 +1,6 @@
-import {
-  CircleUser,
-  Dumbbell,
-  HeartPulse,
-  ListPlus,
-  Play,
-  Salad,
-  Sparkles,
-  Trophy,
-} from "lucide-react";
+import { Bot, Dumbbell, HeartPulse, ListPlus, Play, Salad, Sparkles, Trophy } from "lucide-react";
 import Link from "next/link";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { LogWeightButton } from "@/components/body/log-weight";
@@ -124,13 +116,7 @@ async function Dashboard() {
             {profile?.displayName ? `, ${profile.displayName}` : ""}
           </h1>
         </div>
-        <Link
-          href="/profile"
-          aria-label="Profile and settings"
-          className="text-muted-foreground hover:text-foreground -mr-2 flex size-10 items-center justify-center rounded-full md:hidden"
-        >
-          <CircleUser className="size-6" />
-        </Link>
+        <NotificationBell />
       </header>
 
       {isNew ? (
@@ -249,6 +235,10 @@ async function Dashboard() {
           </Link>
         )}
       </section>
+
+      <Link href="/coach" className={buttonVariants({ variant: "outline", className: "h-12" })}>
+        <Bot /> Ask the coach
+      </Link>
 
       {insight && (
         <Link href={insight.href}>

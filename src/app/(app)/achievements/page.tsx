@@ -10,6 +10,7 @@ import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { formatDate, formatRecord } from "@/lib/format";
 import { milestones } from "@/modules/achievements/milestones";
+import { myProgress, syncAwardsQuietly } from "@/modules/community/awards";
 import { recordLabels } from "@/modules/analytics/calc";
 import { localDay, weekOf } from "@/modules/analytics/insights";
 import { recentRecords } from "@/modules/analytics/records";
@@ -80,91 +81,124 @@ async function Achievements() {
     );
   }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
-      <Card className="h-fit">
-        <CardLabel className="mb-3">Milestones</CardLabel>
-        <ul className="flex flex-col gap-3 text-sm">
-          {list.map((m) => (
-            <li key={m.key} className="flex items-start gap-2.5">
-              {m.reachedOn ? (
-                <CheckCircle2 className="text-accent mt-0.5 size-4 shrink-0" />
-              ) : (
-                <Circle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className={m.reachedOn ? "font-medium" : "text-muted-foreground"}>{m.title}</p>
-                {m.reachedOn ? (
-                  <p className="text-muted-foreground text-xs">{dayText(m.reachedOn)}</p>
-                ) : (
-                  <div
-                    className="bg-muted mt-1.5 h-1.5 rounded-full"
-                    role="progressbar"
-                    aria-valuenow={m.progress}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${m.title}: ${m.progress}%`}
-                  >
-                    <div
-                      className="bg-accent h-1.5 rounded-full"
-                      style={{ width: `${m.progress}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Card>
+  await syncAwardsQuietly(db, user.id);
+  const progress = await myProgress(db, user.id);
+  const pct = Math.round((progress.intoLevel / progress.forNext) * 100);
 
-      <div className="flex flex-col gap-4">
-        {records.length ? (
-          [...months].map(([month, rows]) => (
-            <Card key={month}>
-              <CardLabel className="mb-3">
-                {month} · records on {rows.size} exercise{rows.size === 1 ? "" : "s"}
-              </CardLabel>
-              <ul className="flex flex-col gap-2.5 text-sm">
-                {[...rows.values()].map((row) => {
-                  const top = headline(row);
-                  return (
-                    <li key={row.exerciseId} className="flex items-start gap-2">
-                      <Trophy className="text-accent mt-0.5 size-4 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/exercises/${row.exerciseId}`}
-                          className="block truncate font-medium hover:underline"
-                        >
-                          {row.exercise}
-                        </Link>
-                        <span className="text-muted-foreground text-xs">
-                          {row.recs
-                            .map((r) => r.type)
-                            .sort((a, b) => order.indexOf(a) - order.indexOf(b))
-                            .map((t) => recordLabels[t])
-                            .join(", ")}{" "}
-                          · {formatDate(row.last, tz)}
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-2xl font-semibold">Level {progress.level}</p>
+          <p className="text-muted-foreground text-sm">
+            {progress.xp.toLocaleString("en")} XP · {progress.streakWeeks}{" "}
+            {progress.streakWeeks === 1 ? "week" : "weeks"} in a row
+          </p>
+        </div>
+        <div
+          role="progressbar"
+          aria-label={`Level ${progress.level + 1}: ${pct}%`}
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="bg-muted h-2 overflow-hidden rounded-full"
+        >
+          <div className="bg-accent h-full rounded-full" style={{ width: `${pct}%` }} />
+        </div>
+        <p className="text-muted-foreground text-xs">
+          {(progress.forNext - progress.intoLevel).toLocaleString("en")} XP to level{" "}
+          {progress.level + 1}. {progress.badges.length}{" "}
+          {progress.badges.length === 1 ? "badge" : "badges"} earned.{" "}
+          <Link href="/leaderboards/rules" className="text-accent font-medium">
+            How XP works
+          </Link>
+        </p>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
+        <Card className="h-fit">
+          <CardLabel className="mb-3">Milestones</CardLabel>
+          <ul className="flex flex-col gap-3 text-sm">
+            {list.map((m) => (
+              <li key={m.key} className="flex items-start gap-2.5">
+                {m.reachedOn ? (
+                  <CheckCircle2 className="text-accent mt-0.5 size-4 shrink-0" />
+                ) : (
+                  <Circle className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className={m.reachedOn ? "font-medium" : "text-muted-foreground"}>{m.title}</p>
+                  {m.reachedOn ? (
+                    <p className="text-muted-foreground text-xs">{dayText(m.reachedOn)}</p>
+                  ) : (
+                    <div
+                      className="bg-muted mt-1.5 h-1.5 rounded-full"
+                      role="progressbar"
+                      aria-valuenow={m.progress}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${m.title}: ${m.progress}%`}
+                    >
+                      <div
+                        className="bg-accent h-1.5 rounded-full"
+                        style={{ width: `${m.progress}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <div className="flex flex-col gap-4">
+          {records.length ? (
+            [...months].map(([month, rows]) => (
+              <Card key={month}>
+                <CardLabel className="mb-3">
+                  {month} · records on {rows.size} exercise{rows.size === 1 ? "" : "s"}
+                </CardLabel>
+                <ul className="flex flex-col gap-2.5 text-sm">
+                  {[...rows.values()].map((row) => {
+                    const top = headline(row);
+                    return (
+                      <li key={row.exerciseId} className="flex items-start gap-2">
+                        <Trophy className="text-accent mt-0.5 size-4 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            href={`/exercises/${row.exerciseId}`}
+                            className="block truncate font-medium hover:underline"
+                          >
+                            {row.exercise}
+                          </Link>
+                          <span className="text-muted-foreground text-xs">
+                            {row.recs
+                              .map((r) => r.type)
+                              .sort((a, b) => order.indexOf(a) - order.indexOf(b))
+                              .map((t) => recordLabels[t])
+                              .join(", ")}{" "}
+                            · {formatDate(row.last, tz)}
+                          </span>
+                        </div>
+                        <span className="text-right">
+                          <span className="block font-semibold tabular-nums">
+                            {formatRecord(top.type, top.value, units)}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {recordLabels[top.type]}
+                          </span>
                         </span>
-                      </div>
-                      <span className="text-right">
-                        <span className="block font-semibold tabular-nums">
-                          {formatRecord(top.type, top.value, units)}
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                          {recordLabels[top.type]}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            ))
+          ) : (
+            <Card>
+              <p className="text-muted-foreground text-sm">No personal records yet.</p>
             </Card>
-          ))
-        ) : (
-          <Card>
-            <p className="text-muted-foreground text-sm">No personal records yet.</p>
-          </Card>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

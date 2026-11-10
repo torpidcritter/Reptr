@@ -10,3 +10,4 @@ export * from "./programs";
 export * from "./coach";
 export * from "./ops";
 export * from "./social";
+export * from "./community";
