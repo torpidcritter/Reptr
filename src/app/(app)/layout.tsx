@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { AccountScope } from "@/components/layout/account-scope";
 import { BottomNav, Sidebar } from "@/components/layout/app-nav";
+import { DeviceAlerts } from "@/components/layout/device-alerts";
 import { OutboxSyncer } from "@/components/layout/outbox-syncer";
 import { TimezoneCookie } from "@/components/layout/timezone-cookie";
 import { ActiveWorkoutPill } from "@/components/workout/active-workout-pill";
@@ -14,6 +16,12 @@ async function OnboardingGate() {
   const profile = await getProfile(user.id);
   if (!profile?.onboardedAt) redirect("/onboarding");
   return null;
+}
+
+/** Points this device's stores at the signed-in account (see lib/device/scope.ts). */
+async function DeviceAccount() {
+  const user = await requireUser();
+  return <AccountScope userId={user.id} />;
 }
 
 /** Makes it obvious when the screens show the sample account rather than real training. */
@@ -40,10 +48,14 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <Suspense fallback={null}>
             <DemoBanner />
           </Suspense>
+          <DeviceAlerts />
           {children}
         </main>
       </div>
       <BottomNav />
+      <Suspense fallback={null}>
+        <DeviceAccount />
+      </Suspense>
       <WorkoutSyncer />
       <OutboxSyncer />
       <TimezoneCookie />

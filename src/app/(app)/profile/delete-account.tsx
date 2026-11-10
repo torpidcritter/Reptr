@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { forgetDeletedAccount } from "@/lib/device/session";
 import { deleteConfirmWord } from "@/modules/ops/confirm-word";
 import type { DeleteState } from "./actions";
 
@@ -13,6 +14,10 @@ export function DeleteAccount({
 }) {
   const [state, action, pending] = useActionState<DeleteState, FormData>(deleteAccountAction, {});
   const [typed, setTyped] = useState("");
+  // Once the server confirms, nothing of the account is left on this device either.
+  useEffect(() => {
+    if (state.deleted) forgetDeletedAccount();
+  }, [state.deleted]);
   return (
     <details className="group">
       <summary className="text-danger cursor-pointer text-sm font-medium">Delete account</summary>
@@ -41,9 +46,9 @@ export function DeleteAccount({
           type="submit"
           variant="outline"
           className="border-danger text-danger"
-          disabled={pending || typed.trim() !== deleteConfirmWord}
+          disabled={pending || state.deleted || typed.trim() !== deleteConfirmWord}
         >
-          {pending ? "Deleting…" : "Delete my account"}
+          {pending || state.deleted ? "Deleting…" : "Delete my account"}
         </Button>
       </form>
     </details>

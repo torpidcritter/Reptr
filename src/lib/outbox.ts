@@ -4,53 +4,117 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { applyOpAction } from "@/app/(app)/outbox-actions";
 import type { Op } from "@/modules/ops/outbox";
-import { idbStorage } from "./workout-store";
+import {
+  backoffMs,
+  classifyThrown,
+  isRetryable,
+  syncMessage,
+  type SyncErrorKind,
+} from "@/modules/sync/errors";
+import { accountStorage, currentAccount, registerAccountStore } from "./device/scope";
 
 // Quick logs (food, water, check-ins, body entries) made while offline wait here, in
-// IndexedDB, and are sent in order once the connection is back. Each carries an id the
-// server remembers, so a retry never doubles an entry.
+// IndexedDB under the signed-in account, and are sent in order once the connection is
+// back. Each carries an id the server remembers, so a retry never doubles an entry.
+//
+// A failure is sorted by kind: brief ones (offline, busy, rate-limited) are retried with
+// backoff; ones that won't fix themselves (refused data, another account) move to
+// `failed`, where they're kept until the person retries or removes them, and don't hold
+// up the rest of the queue.
 
-export type QueuedOp = Op & { queuedAt: number; attempts: number };
+export type QueuedOp = Op & {
+  queuedAt: number;
+  attempts: number;
+  /** The account that made it; never sent while another account is signed in. */
+  owner?: string;
+  /** Earliest time to try again after a brief failure. */
+  notBefore?: number;
+};
+
+export type FailedOp = { op: QueuedOp; kind: SyncErrorKind; error: string; at: number };
 
 /** The op as the server takes it, without the queue's bookkeeping. */
 export const opOf = ({ id, kind, payload }: QueuedOp) => ({ id, kind, payload }) as Op;
 
 type State = {
   ops: QueuedOp[];
-  /** Ops the server refused (for example, a value out of range), so they're not retried. */
-  failed: { op: QueuedOp; error: string }[];
+  /** Ops the server refused. Kept until the person retries or removes each one. */
+  failed: FailedOp[];
+  /** Set when sending is paused until the person acts (signed out, app updated). */
+  blocked: SyncErrorKind | null;
   add: (op: Op) => void;
   remove: (id: string) => void;
-  fail: (id: string, error: string) => void;
+  fail: (id: string, kind: SyncErrorKind, error: string) => void;
+  /** Counts a brief failure and sets when to try this op again. */
   tried: (id: string) => void;
-  dismissFailed: () => void;
+  retryFailed: (id: string) => void;
+  removeFailed: (id: string) => void;
+  setBlocked: (kind: SyncErrorKind | null) => void;
 };
+
+const empty = { ops: [] as QueuedOp[], failed: [] as FailedOp[], blocked: null };
 
 export const useOutbox = create<State>()(
   persist(
     (set) => ({
-      ops: [],
-      failed: [],
+      ...empty,
       add: (op) =>
-        set((s) => ({ ops: [...s.ops, { ...op, queuedAt: Date.now(), attempts: 0 } as QueuedOp] })),
+        set((s) => ({
+          ops: [
+            ...s.ops,
+            {
+              ...op,
+              queuedAt: Date.now(),
+              attempts: 0,
+              owner: currentAccount() ?? undefined,
+            } as QueuedOp,
+          ],
+        })),
       remove: (id) => set((s) => ({ ops: s.ops.filter((o) => o.id !== id) })),
-      fail: (id, error) =>
+      fail: (id, kind, error) =>
         set((s) => {
           const op = s.ops.find((o) => o.id === id);
           return {
             ops: s.ops.filter((o) => o.id !== id),
-            failed: op ? [...s.failed, { op, error }].slice(-10) : s.failed,
+            failed: op ? [...s.failed, { op, kind, error, at: Date.now() }] : s.failed,
           };
         }),
       tried: (id) =>
         set((s) => ({
-          ops: s.ops.map((o) => (o.id === id ? { ...o, attempts: o.attempts + 1 } : o)),
+          ops: s.ops.map((o) =>
+            o.id === id
+              ? { ...o, attempts: o.attempts + 1, notBefore: Date.now() + backoffMs(o.attempts) }
+              : o,
+          ),
         })),
-      dismissFailed: () => set({ failed: [] }),
+      retryFailed: (id) =>
+        set((s) => {
+          const f = s.failed.find((x) => x.op.id === id);
+          if (!f) return {};
+          return {
+            failed: s.failed.filter((x) => x.op.id !== id),
+            ops: [...s.ops, { ...f.op, attempts: 0, notBefore: undefined }],
+          };
+        }),
+      removeFailed: (id) => set((s) => ({ failed: s.failed.filter((x) => x.op.id !== id) })),
+      setBlocked: (blocked) => set({ blocked }),
     }),
-    { name: "reptr-outbox", storage: createJSONStorage(() => idbStorage) },
+    {
+      name: "reptr-outbox",
+      storage: createJSONStorage(() => accountStorage),
+      skipHydration: true,
+      partialize: ({ ops, failed }) => ({ ops, failed }),
+    },
   ),
 );
+
+registerAccountStore(useOutbox, () => useOutbox.setState({ ...empty }));
+
+/** True while this device holds quick logs the server hasn't taken. */
+export function hasUnsyncedOps() {
+  const s = useOutbox.getState();
+  return s.ops.length > 0 || s.failed.length > 0;
+}
 
 export type SendResult = { error?: string; queued?: boolean };
 
@@ -70,14 +134,15 @@ export async function sendOrQueue(
     return { queued: true };
   }
   try {
-    const res = await applyOpAction(op);
+    const res = await applyOpAction(op, currentAccount() ?? undefined);
     if (res.ok) return {};
-    if (res.retry) {
+    if (isRetryable(res.kind)) {
       useOutbox.getState().add(op);
       return { queued: true };
     }
-    return { error: res.error };
-  } catch {
+    return { error: res.kind === "validation" ? res.error : syncMessage(res.kind, res.error) };
+  } catch (err) {
+    if (classifyThrown(err) === "stale_build") useOutbox.getState().setBlocked("stale_build");
     useOutbox.getState().add(op);
     return { queued: true };
   }

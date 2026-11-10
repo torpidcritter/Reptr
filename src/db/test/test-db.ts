@@ -7,6 +7,15 @@ import { seed } from "../seed/seed";
 
 export const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
+// Database tests skip without a test database. Say so once, so a local run that "passes"
+// with most tests skipped isn't mistaken for a full run. CI always sets it.
+if (!testDatabaseUrl && !(globalThis as { __reptrDbWarned?: boolean }).__reptrDbWarned) {
+  (globalThis as { __reptrDbWarned?: boolean }).__reptrDbWarned = true;
+  console.warn(
+    "[db] TEST_DATABASE_URL is not set: database tests are SKIPPED. See .env.example to run them.",
+  );
+}
+
 /**
  * Creates a fresh, migrated and seeded database for one test file, so test files
  * can run in parallel. Needs TEST_DATABASE_URL pointing at a throwaway Postgres.

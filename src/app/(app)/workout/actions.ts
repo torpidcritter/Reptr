@@ -17,16 +17,25 @@ import {
   getWorkout,
   getPreviousPerformance,
   saveWorkoutSnapshot,
+  type SyncConflict,
   type SyncInfo,
-  WorkoutLockedError,
+  WorkoutConflictError,
+  WorkoutValidationError,
 } from "@/modules/workouts/workouts";
+import type { SyncFailure } from "@/modules/sync/errors";
+import { failure } from "@/modules/sync/server";
 
 export type SaveResult =
-  | { ok: true; version: number; merged?: WorkoutSnapshot }
-  | { ok: false; locked?: boolean; error: string };
+  | { ok: true; version: number; merged?: WorkoutSnapshot; alreadyFinished?: boolean }
+  | { ok: false; kind: "conflict"; conflict: SyncConflict; error: string }
+  | SyncFailure;
 
 const syncSchema = z
-  .object({ deviceId: z.string().min(8).max(64), baseVersion: z.number().int().min(0).nullable() })
+  .object({
+    deviceId: z.string().min(8).max(64),
+    baseVersion: z.number().int().min(0).nullable(),
+    takeOver: z.boolean().optional(),
+  })
   .optional();
 
 export async function saveWorkoutAction(
@@ -35,9 +44,11 @@ export async function saveWorkoutAction(
 ): Promise<SaveResult> {
   const user = await requireUser();
   const busy = await overLimit(user.id, "write");
-  if (busy) return { ok: false, error: busy };
+  if (busy) return { ok: false, kind: "rate_limited", error: busy };
   const parsed = workoutSnapshotSchema.safeParse(snapshot);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  if (!parsed.success) {
+    return { ok: false, kind: "validation", error: parsed.error.issues[0].message };
+  }
   const device = syncSchema.safeParse(sync);
   let out: Awaited<ReturnType<typeof saveWorkoutSnapshot>>;
   try {
@@ -48,12 +59,22 @@ export async function saveWorkoutAction(
       device.success ? device.data : undefined,
     );
   } catch (e) {
-    if (e instanceof WorkoutLockedError) return { ok: false, locked: true, error: e.message };
-    throw e;
+    if (e instanceof WorkoutConflictError) {
+      log.warn("workout_sync_conflict", { kind: e.conflict.kind, workoutId: parsed.data.id });
+      return { ok: false, kind: "conflict", conflict: e.conflict, error: e.message };
+    }
+    if (e instanceof WorkoutValidationError)
+      return { ok: false, kind: "validation", error: e.message };
+    return failure("workout_save_failed", e);
   }
   if (parsed.data.status === "completed") revalidatePath("/", "layout");
   if (out.merged) log.info("workout_merged", { workoutId: parsed.data.id });
-  return { ok: true, version: out.version, merged: out.merged };
+  return {
+    ok: true,
+    version: out.version,
+    merged: out.merged,
+    alreadyFinished: out.alreadyFinished,
+  };
 }
 
 export async function startFromRoutineAction(routineId: string) {

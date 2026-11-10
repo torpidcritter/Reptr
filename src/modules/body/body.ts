@@ -206,6 +206,15 @@ export async function listPhotos(db: Database, userId: string) {
     .orderBy(desc(progressPhotos.takenOn), asc(progressPhotos.pose));
 }
 
+/** One photo's row, to remove its file before the row itself. */
+export async function getPhoto(db: Database, userId: string, id: string) {
+  const [row] = await db
+    .select({ id: progressPhotos.id, storagePath: progressPhotos.storagePath })
+    .from(progressPhotos)
+    .where(and(eq(progressPhotos.id, id), eq(progressPhotos.userId, userId)));
+  return row ?? null;
+}
+
 export async function deletePhoto(db: Database, userId: string, id: string) {
   const [row] = await db
     .delete(progressPhotos)

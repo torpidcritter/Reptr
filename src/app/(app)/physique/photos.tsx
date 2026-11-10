@@ -177,7 +177,10 @@ export function Photos({
                         danger: true,
                       })
                     )
-                      start(() => deletePhotoAction(p.id));
+                      start(async () => {
+                        const res = await deletePhotoAction(p.id);
+                        setError(res.error ?? null);
+                      });
                   }}
                 >
                   <Trash2 className="size-3.5" />

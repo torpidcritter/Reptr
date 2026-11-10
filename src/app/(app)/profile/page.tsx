@@ -1,15 +1,16 @@
-import { ChevronRight, Download, LogOut } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { recentAudit } from "@/modules/ops/audit";
 import { deleteAccountAction, signOut } from "./actions";
+import { SignOutButton } from "./sign-out-button";
 import { DeleteAccount } from "./delete-account";
 import { SettingsForm } from "./settings-form";
 
@@ -131,11 +132,7 @@ async function ProfileBody() {
           <Suspense fallback={null}>
             <Activity userId={user.id} />
           </Suspense>
-          <form action={signOut}>
-            <Button variant="outline" className="w-full">
-              <LogOut /> Sign out
-            </Button>
-          </form>
+          <SignOutButton signOut={signOut} />
           <Card>
             <DeleteAccount deleteAccountAction={deleteAccountAction} />
           </Card>
