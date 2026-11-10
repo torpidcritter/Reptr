@@ -6,7 +6,8 @@ import { useEffect, useRef } from "react";
 import { applyOpAction } from "@/app/(app)/outbox-actions";
 import { currentAccount } from "@/lib/device/scope";
 import { syncPaused } from "@/lib/device/session";
-import { opOf, useOutbox } from "@/lib/outbox";
+import { isLeader, useTabRole } from "@/lib/device/tabs";
+import { mutateOutbox, opOf, useOutbox } from "@/lib/outbox";
 import { classifyThrown, isRetryable, needsPerson, syncMessage } from "@/modules/sync/errors";
 
 /**
@@ -28,7 +29,7 @@ export function OutboxSyncer() {
       timer.current = setTimeout(run, Math.max(0, ms));
     };
     const run = async () => {
-      if (running.current || syncPaused() || useOutbox.getState().blocked) return;
+      if (running.current || syncPaused() || useOutbox.getState().blocked || !isLeader()) return;
       const me = currentAccount();
       if (!me) return;
       running.current = true;
@@ -50,19 +51,19 @@ export function OutboxSyncer() {
               useOutbox.getState().setBlocked(kind);
               return;
             }
-            useOutbox.getState().tried(next.id);
+            await mutateOutbox((s) => s.tried(next.id));
             continue; // the loop waits for notBefore
           }
           if (res.ok) {
-            useOutbox.getState().remove(next.id);
+            await mutateOutbox((s) => s.remove(next.id));
             sent++;
           } else if (isRetryable(res.kind)) {
-            useOutbox.getState().tried(next.id);
+            await mutateOutbox((s) => s.tried(next.id));
           } else if (needsPerson(res.kind)) {
             useOutbox.getState().setBlocked(res.kind);
             return;
           } else {
-            useOutbox.getState().fail(next.id, res.kind, res.error);
+            await mutateOutbox((s) => s.fail(next.id, res.kind, res.error));
           }
         }
       } finally {
@@ -78,6 +79,8 @@ export function OutboxSyncer() {
     const unsubscribe = useOutbox.subscribe((s, prev) => {
       if (s.ops.length > prev.ops.length) schedule(1000);
     });
+    // A tab that takes over the lead picks up the queue.
+    const unlead = useTabRole.subscribe((s, prev) => s.leader && !prev.leader && now());
     window.addEventListener("online", now);
     document.addEventListener("visibilitychange", onVisible);
     // The persisted queue loads from IndexedDB once the account is known; start then.
@@ -85,6 +88,7 @@ export function OutboxSyncer() {
     if (useOutbox.persist.hasHydrated()) now();
     return () => {
       unsubscribe();
+      unlead();
       unhydrated();
       window.removeEventListener("online", now);
       document.removeEventListener("visibilitychange", onVisible);
@@ -113,14 +117,14 @@ export function OutboxSyncer() {
               <button
                 type="button"
                 className="text-accent inline-flex items-center gap-1 font-medium"
-                onClick={() => useOutbox.getState().retryFailed(first.op.id)}
+                onClick={() => mutateOutbox((s) => s.retryFailed(first.op.id))}
               >
                 <RotateCw className="size-3.5" /> Try again
               </button>
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                onClick={() => useOutbox.getState().removeFailed(first.op.id)}
+                onClick={() => mutateOutbox((s) => s.removeFailed(first.op.id))}
               >
                 <X className="size-3.5" /> Remove it
               </button>

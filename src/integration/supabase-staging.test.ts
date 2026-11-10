@@ -6,6 +6,10 @@ import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { sql as q } from "drizzle-orm";
+import * as schema from "@/db/schema";
+import { withUser } from "@/db/with-user";
 import { emptyFolder, listFolder, removeFiles } from "@/lib/supabase/storage";
 import { photoBucket } from "@/modules/body/metrics";
 
@@ -124,5 +128,27 @@ describe.skipIf(!configured)("Supabase staging: auth, storage and deletion", () 
     const res = await a.client.from("profiles").select("user_id").eq("user_id", b.id);
     // Either the Data API is off for this schema (an error), or RLS hides B's row.
     if (!res.error) expect(res.data).toEqual([]);
+  });
+
+  it("runs queries as the user through the pooler, and leaves nothing behind on the connection", async () => {
+    // STAGING_DATABASE_URL should be the transaction pooler (port 6543), as in production.
+    const db = drizzle(sql, { schema });
+    await sql`insert into profiles (user_id, display_name) values (${a.id}, 'A') on conflict do nothing`;
+    await sql`insert into profiles (user_id, display_name) values (${b.id}, 'B') on conflict do nothing`;
+    const seen = await withUser(db, a.id, async (tx) => {
+      const [who] = await tx.execute<{ role: string; uid: string }>(
+        q`select current_user as role, auth.uid()::text as uid`,
+      );
+      const rows = await tx.select({ id: schema.profiles.userId }).from(schema.profiles);
+      return { who, ids: rows.map((r) => r.id) };
+    });
+    expect(seen.who).toMatchObject({ role: "authenticated", uid: a.id });
+    expect(seen.ids).toEqual([a.id]);
+
+    // The next query on the same pooled connection is back to normal.
+    const [after] =
+      await sql`select current_user as role, coalesce(current_setting('request.jwt.claim.sub', true), '') as sub`;
+    expect(after.role).not.toBe("authenticated");
+    expect(after.sub).toBe("");
   });
 });

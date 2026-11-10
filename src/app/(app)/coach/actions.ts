@@ -6,11 +6,12 @@ import { z } from "zod";
 import { db } from "@/db";
 import { audit } from "@/modules/ops/audit";
 import { overLimit } from "@/lib/guard";
-import { log } from "@/lib/log";
+import { log, timed } from "@/lib/log";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
 import { entrySchema, logEntry } from "@/modules/body/body";
-import { type ChatClient, runCoach, systemPrompt } from "@/modules/coach/agent";
+import { type ChatClient, CoachTimeoutError, runCoach, systemPrompt } from "@/modules/coach/agent";
+import { budgetBlock, coachLimits, recordUsage, type Usage } from "@/modules/coach/budget";
 import type { Proposal } from "@/modules/coach/tools";
 import {
   addMemory,
@@ -40,8 +41,12 @@ export async function askCoachAction(history: unknown): Promise<CoachReply> {
   const parsed = historySchema.safeParse(history);
   if (!parsed.success || parsed.data.at(-1)!.role !== "user")
     return { error: "Something went wrong with that message." };
-  const busy = await overLimit(user.id, "coach", "coachDaily");
-  if (busy) return { error: busy };
+  const busy =
+    (await overLimit(user.id, "coach", "coachDaily")) ?? (await budgetBlock(db, user.id));
+  if (busy) {
+    log.warn("coach_blocked", { reason: busy });
+    return { error: busy };
+  }
 
   const [profile, tz, memories] = await Promise.all([
     getProfile(user.id),
@@ -56,22 +61,49 @@ export async function askCoachAction(history: unknown): Promise<CoachReply> {
       goal: profile?.goal ?? "all_round",
       today: `${localDay(now, tz)} (${new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: tz }).format(now)})`,
     }) + memoryPrompt(memories);
+  const limits = coachLimits();
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const track = async (usage: Usage, outcome: Parameters<typeof recordUsage>[4]) => {
+    try {
+      const cost = await recordUsage(db, user.id, model, usage, outcome);
+      log.info("coach_usage", { model, outcome, ...usage, costMicros: cost });
+    } catch (err) {
+      log.error("coach_usage_write_failed", { err });
+    }
+  };
   try {
-    const client = new OpenAI({ apiKey: key }) as unknown as ChatClient;
-    const out = await runCoach(
-      client,
-      process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      { db, userId: user.id, timeZone: tz, now },
-      system,
-      parsed.data,
+    const client = new OpenAI({
+      apiKey: key,
+      timeout: limits.requestTimeoutMs,
+      maxRetries: limits.maxRetries,
+    }) as unknown as ChatClient;
+    const out = await timed(
+      "coach_answer",
+      () =>
+        runCoach(
+          client,
+          model,
+          { db, userId: user.id, timeZone: tz, now },
+          system,
+          parsed.data,
+          limits,
+        ),
+      20_000,
     );
+    await track(out.usage, out.outcome);
     return { reply: out.reply, proposals: out.proposals };
   } catch (e) {
     const status = (e as { status?: number }).status;
-    log.error("coach_failed", { status, err: e });
+    const usage = (e as { usage?: Usage }).usage ?? { promptTokens: 0, completionTokens: 0 };
+    const timedOut =
+      e instanceof CoachTimeoutError ||
+      (e as { name?: string }).name === "APIConnectionTimeoutError";
+    await track(usage, timedOut ? "timed_out" : "failed");
+    log.error("coach_failed", { status, timedOut, err: e });
     return {
-      error:
-        status === 401
+      error: timedOut
+        ? "The coach took too long to answer. Try a shorter or narrower question."
+        : status === 401
           ? "The OpenAI API key was rejected. Check OPENAI_API_KEY."
           : status === 429
             ? "OpenAI is rate-limiting or out of credit. Try again in a minute."

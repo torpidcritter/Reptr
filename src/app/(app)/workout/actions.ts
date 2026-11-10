@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { z } from "zod";
 import { overLimit } from "@/lib/guard";
-import { log } from "@/lib/log";
+import { log, timed } from "@/lib/log";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { localDay } from "@/modules/analytics/insights";
 import { applyDeload, blockWeek } from "@/modules/programs/block";
@@ -52,11 +52,8 @@ export async function saveWorkoutAction(
   const device = syncSchema.safeParse(sync);
   let out: Awaited<ReturnType<typeof saveWorkoutSnapshot>>;
   try {
-    out = await saveWorkoutSnapshot(
-      db,
-      user.id,
-      parsed.data,
-      device.success ? device.data : undefined,
+    out = await timed("workout_save", () =>
+      saveWorkoutSnapshot(db, user.id, parsed.data, device.success ? device.data : undefined),
     );
   } catch (e) {
     if (e instanceof WorkoutConflictError) {

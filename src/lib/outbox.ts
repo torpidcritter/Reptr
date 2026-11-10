@@ -11,7 +11,8 @@ import {
   syncMessage,
   type SyncErrorKind,
 } from "@/modules/sync/errors";
-import { accountStorage, currentAccount, registerAccountStore } from "./device/scope";
+import { accountStorage, currentAccount, registerAccountStore, writeShared } from "./device/scope";
+import { withStoreLock } from "./device/tabs";
 
 // Quick logs (food, water, check-ins, body entries) made while offline wait here, in
 // IndexedDB under the signed-in account, and are sent in order once the connection is
@@ -108,7 +109,25 @@ export const useOutbox = create<State>()(
   ),
 );
 
-registerAccountStore(useOutbox, () => useOutbox.setState({ ...empty }));
+registerAccountStore(
+  useOutbox,
+  () => useOutbox.setState({ ...empty }),
+  ({ ops, failed }) =>
+    (ops === undefined || Array.isArray(ops)) && (failed === undefined || Array.isArray(failed)),
+);
+
+/**
+ * Changes the queue safely when several tabs are open: under a lock, from the latest
+ * saved copy, saved before the lock is let go. Every change to the queue goes through here.
+ */
+export async function mutateOutbox(fn: (s: State) => void) {
+  await withStoreLock("reptr-outbox", async () => {
+    await useOutbox.persist.rehydrate();
+    fn(useOutbox.getState());
+    const { ops, failed } = useOutbox.getState();
+    await writeShared("reptr-outbox", JSON.stringify({ state: { ops, failed }, version: 0 }));
+  });
+}
 
 /** True while this device holds quick logs the server hasn't taken. */
 export function hasUnsyncedOps() {
@@ -130,20 +149,20 @@ export async function sendOrQueue(
   const op = { id: crypto.randomUUID(), kind, payload } as Op;
   // Anything already waiting goes first, so changes reach the server in order.
   if (useOutbox.getState().ops.length || (typeof navigator !== "undefined" && !navigator.onLine)) {
-    useOutbox.getState().add(op);
+    await mutateOutbox((s) => s.add(op));
     return { queued: true };
   }
   try {
     const res = await applyOpAction(op, currentAccount() ?? undefined);
     if (res.ok) return {};
     if (isRetryable(res.kind)) {
-      useOutbox.getState().add(op);
+      await mutateOutbox((s) => s.add(op));
       return { queued: true };
     }
     return { error: res.kind === "validation" ? res.error : syncMessage(res.kind, res.error) };
   } catch (err) {
     if (classifyThrown(err) === "stale_build") useOutbox.getState().setBlocked("stale_build");
-    useOutbox.getState().add(op);
+    await mutateOutbox((s) => s.add(op));
     return { queued: true };
   }
 }

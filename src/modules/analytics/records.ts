@@ -35,6 +35,98 @@ async function currentBests(db: Database | Tx, userId: string, exerciseIds: stri
   return out;
 }
 
+async function measurements(db: Database | Tx, ids: string[]) {
+  if (!ids.length) return new Map<string, string>();
+  const rows = await db
+    .select({ id: exercises.id, measurement: exercises.measurement })
+    .from(exercises)
+    .where(inArray(exercises.id, [...new Set(ids)]));
+  return new Map(rows.map((r) => [r.id, r.measurement as string]));
+}
+
+/**
+ * Recomputes every personal record for some exercises from the completed workouts, in
+ * the order they were finished, exactly as if each finish had been recorded in turn.
+ * Used after a finished workout is corrected or deleted, so no record outlives the set
+ * that earned it.
+ */
+export async function rebuildPersonalRecords(tx: Tx, userId: string, exerciseIds: string[]) {
+  const ids = [...new Set(exerciseIds)];
+  if (!ids.length) return 0;
+  await tx
+    .delete(personalRecords)
+    .where(and(eq(personalRecords.userId, userId), inArray(personalRecords.exerciseId, ids)));
+  const rows = await tx
+    .select({
+      workoutId: workouts.id,
+      finishedAt: workouts.finishedAt,
+      exerciseId: workoutExercises.exerciseId,
+      set: workoutSets,
+    })
+    .from(workoutSets)
+    .innerJoin(workoutExercises, eq(workoutExercises.id, workoutSets.workoutExerciseId))
+    .innerJoin(workouts, eq(workouts.id, workoutExercises.workoutId))
+    .where(
+      and(
+        eq(workouts.userId, userId),
+        eq(workouts.status, "completed"),
+        inArray(workoutExercises.exerciseId, ids),
+      ),
+    )
+    .orderBy(asc(workouts.finishedAt), asc(workouts.id), asc(workoutSets.setNumber));
+
+  // Group into finished workouts, oldest first, and replay them.
+  const sessions: { finishedAt: Date; exercises: Map<string, FinishedExercise["sets"]> }[] = [];
+  let current: (typeof sessions)[number] | null = null;
+  let currentId: string | null = null;
+  for (const r of rows) {
+    if (r.workoutId !== currentId) {
+      currentId = r.workoutId;
+      current = { finishedAt: r.finishedAt!, exercises: new Map() };
+      sessions.push(current);
+    }
+    const sets = current!.exercises.get(r.exerciseId) ?? [];
+    sets.push({
+      id: r.set.id,
+      type: r.set.type,
+      weightKg: r.set.weightKg,
+      reps: r.set.reps,
+      durationSeconds: r.set.durationSeconds,
+      distanceMeters: r.set.distanceMeters,
+      completedAt: r.set.completedAt?.toISOString() ?? null,
+    });
+    current!.exercises.set(r.exerciseId, sets);
+  }
+  // Same rules as recordPersonalRecords, with the running bests kept in memory.
+  const measured = await measurements(tx, ids);
+  const bests = new Map<string, Partial<Record<RecordType, number>>>();
+  const out: (typeof personalRecords.$inferInsert)[] = [];
+  for (const s of sessions) {
+    for (const [exerciseId, raw] of s.exercises) {
+      const sets =
+        measured.get(exerciseId) === "assisted_reps"
+          ? raw.map((x) => ({ ...x, weightKg: null }))
+          : raw;
+      const best = bests.get(exerciseId) ?? {};
+      for (const r of findRecords(sets, best)) {
+        best[r.type] = r.value;
+        out.push({
+          userId,
+          exerciseId,
+          type: r.type,
+          value: r.value,
+          setId: r.set.id,
+          achievedAt: r.set.completedAt ? new Date(r.set.completedAt) : s.finishedAt,
+        });
+      }
+      bests.set(exerciseId, best);
+    }
+  }
+  for (let i = 0; i < out.length; i += 500)
+    await tx.insert(personalRecords).values(out.slice(i, i + 500));
+  return out.length;
+}
+
 /** Called when a workout is finished: stores any new personal records it set. */
 export async function recordPersonalRecords(
   tx: Tx,
@@ -42,12 +134,19 @@ export async function recordPersonalRecords(
   finishedAt: Date,
   exercises: FinishedExercise[],
 ) {
-  // The same exercise can appear twice in a workout; judge all its sets together.
+  // The same exercise can appear twice in a workout; judge all its sets together. The
+  // measurement comes from the exercise row, not from the device's copy.
+  const measured = await measurements(
+    tx,
+    exercises.map((e) => e.exerciseId),
+  );
   const byExercise = new Map<string, FinishedExercise["sets"]>();
   for (const e of exercises) {
     // For assisted work the weight is help, not load, so only the reps can be a record.
     const sets =
-      e.measurement === "assisted_reps" ? e.sets.map((s) => ({ ...s, weightKg: null })) : e.sets;
+      (measured.get(e.exerciseId) ?? e.measurement) === "assisted_reps"
+        ? e.sets.map((s) => ({ ...s, weightKg: null }))
+        : e.sets;
     byExercise.set(e.exerciseId, [...(byExercise.get(e.exerciseId) ?? []), ...sets]);
   }
   const bests = await currentBests(tx, userId, [...byExercise.keys()]);

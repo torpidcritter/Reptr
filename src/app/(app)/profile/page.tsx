@@ -120,13 +120,23 @@ async function ProfileBody() {
               >
                 <Download /> Everything (JSON)
               </a>
-              <a
-                href="/profile/export?format=csv"
-                className={buttonVariants({ variant: "outline" })}
-                download
-              >
-                <Download /> All sets (CSV for spreadsheets)
-              </a>
+              {(
+                [
+                  ["sets", "All sets"],
+                  ["body", "Weigh-ins and measurements"],
+                  ["food", "Food log"],
+                  ["checkins", "Recovery check-ins"],
+                ] as const
+              ).map(([table, label]) => (
+                <a
+                  key={table}
+                  href={`/profile/export?format=csv&table=${table}`}
+                  className={buttonVariants({ variant: "outline" })}
+                  download
+                >
+                  <Download /> {label} (CSV)
+                </a>
+              ))}
             </div>
           </Card>
           <Suspense fallback={null}>

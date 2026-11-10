@@ -1,11 +1,11 @@
 "use client";
 
-import { HardDrive, RefreshCw, TriangleAlert } from "lucide-react";
+import { Download, HardDrive, RefreshCw, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getActiveWorkoutAction } from "@/app/(app)/workout/actions";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
-import { useStorageHealth } from "@/lib/device/scope";
+import { unreadableData, useStorageHealth } from "@/lib/device/scope";
 import { safeReload } from "@/lib/device/session";
 import { useOutbox } from "@/lib/outbox";
 import { useWorkoutStore } from "@/lib/workout-store";
@@ -182,10 +182,46 @@ function UpdateNeeded() {
 
 function StorageWarning() {
   const error = useStorageHealth((s) => s.writeError);
-  if (!error) return null;
+  const unreadable = useStorageHealth((s) => s.unreadable);
+  if (!error && !unreadable.length) return null;
   return (
     <Alert icon={<HardDrive className="size-5" />} title="Device storage problem">
-      <p className="text-muted-foreground">{error}</p>
+      {error && <p className="text-muted-foreground">{error}</p>}
+      {unreadable.length > 0 && (
+        <>
+          <p className="text-muted-foreground">
+            {unreadable.includes("reptr-active-workout")
+              ? "The workout saved on this device couldn't be read, so Reptr started without it."
+              : "Some changes saved on this device couldn't be read, so Reptr started without them."}{" "}
+            A copy is kept on this device. Download it to keep it, or send it to support.
+          </p>
+          <div className="flex gap-3">
+            <Button size="sm" variant="outline" onClick={downloadUnreadable}>
+              <Download /> Download the copy
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => useStorageHealth.setState({ unreadable: [] })}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </>
+      )}
     </Alert>
   );
+}
+
+async function downloadUnreadable() {
+  const data = await unreadableData();
+  if (!data) return;
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "reptr-device-copy.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

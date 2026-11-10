@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { saveWorkoutAction } from "@/app/(app)/workout/actions";
 import { syncPaused } from "@/lib/device/session";
+import { isLeader, useTabRole } from "@/lib/device/tabs";
 import { deviceId, useWorkoutStore } from "@/lib/workout-store";
 import { backoffMs, classifyThrown, isRetryable, syncMessage } from "@/modules/sync/errors";
 
@@ -34,7 +35,7 @@ export function WorkoutSyncer() {
         sync,
         takeOver,
       } = store();
-      if (!hydrated || !workout || inFlight.current || syncPaused()) return;
+      if (!hydrated || !workout || inFlight.current || syncPaused() || !isLeader()) return;
       if (conflict || sync === "paused" || revision <= syncedRevision) return;
 
       inFlight.current = true;
@@ -104,6 +105,7 @@ export function WorkoutSyncer() {
       attempt.current = 0;
       schedule(0);
     };
+    const unlead = useTabRole.subscribe((s, prev) => s.leader && !prev.leader && now());
     const onVisible = () => document.visibilityState === "visible" && now();
     window.addEventListener("online", now);
     document.addEventListener("visibilitychange", onVisible);
@@ -111,6 +113,7 @@ export function WorkoutSyncer() {
 
     return () => {
       unsubscribe();
+      unlead();
       window.removeEventListener("online", now);
       document.removeEventListener("visibilitychange", onVisible);
       if (timer.current) clearTimeout(timer.current);

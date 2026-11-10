@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { UnitSystem } from "@/lib/units";
+import { takeOverHere, useTabRole } from "@/lib/device/tabs";
 import { useWorkoutStore } from "@/lib/workout-store";
 import { estimateRemainingSeconds } from "@/modules/workouts/estimate";
 import { summarize } from "@/modules/workouts/snapshot";
@@ -40,11 +41,14 @@ export function WorkoutScreen({
 }) {
   const hydrated = useWorkoutStore((s) => s.hydrated);
   const workout = useWorkoutStore((s) => s.workout);
+  const leader = useTabRole((s) => s.leader);
   const [serverChecked, setServerChecked] = useState(false);
+  const empty = !workout;
 
-  // Nothing on this device? Pick up a workout started on another one.
+  // Nothing on this device? Pick up a workout started on another one. Checked again when
+  // the device copy is let go (a discard or finish sent after the page opened).
   useEffect(() => {
-    if (!hydrated || useWorkoutStore.getState().workout) return;
+    if (!hydrated || !leader || !empty || useWorkoutStore.getState().workout) return;
     getActiveWorkoutAction()
       .then((w) => {
         if (w && !useWorkoutStore.getState().workout) {
@@ -55,9 +59,11 @@ export function WorkoutScreen({
       })
       .catch(() => {})
       .finally(() => setServerChecked(true));
-  }, [hydrated]);
+  }, [hydrated, leader, empty]);
 
-  if (!hydrated || (!workout && !serverChecked)) {
+  if (leader === false) return <OpenInAnotherTab name={workout?.name} />;
+
+  if (!hydrated || leader === null || (!workout && !serverChecked)) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
         <Loader2 className="size-4 animate-spin" /> Loading workout…
@@ -67,6 +73,26 @@ export function WorkoutScreen({
 
   if (!workout) return <StartPanel routines={routines} startFrom={startFrom} />;
   return <Logger settings={settings} />;
+}
+
+/**
+ * Another tab (or the installed app) has the workout open. Only one place edits it at a
+ * time, so sets are never overwritten by a stale copy.
+ */
+function OpenInAnotherTab({ name }: { name?: string }) {
+  return (
+    <Card className="flex flex-col gap-3">
+      <p className="font-semibold">Reptr is open in another tab</p>
+      <p className="text-muted-foreground text-sm">
+        {name
+          ? `"${name}" is being logged there. Continue here instead, and that tab will show it read-only.`
+          : "Workouts are logged in one tab at a time. Continue here to start or resume one."}
+      </p>
+      <Button onClick={() => takeOverHere()} className="self-start">
+        Continue here
+      </Button>
+    </Card>
+  );
 }
 
 function StartPanel({ routines, startFrom }: { routines: RoutineOption[]; startFrom?: StartFrom }) {

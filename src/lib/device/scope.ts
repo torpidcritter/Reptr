@@ -3,6 +3,7 @@
 import { del, get, keys, set } from "idb-keyval";
 import { create } from "zustand";
 import type { StateStorage } from "zustand/middleware";
+import { announceChange, isLeader, joinTabs, onOtherTabChange } from "./tabs";
 
 // Everything Reptr keeps on a device (the workout being logged, offline quick logs) is
 // stored under the signed-in account's id. Another account on the same browser reads
@@ -30,11 +31,14 @@ type StorageHealth = {
   persisted: boolean | null;
   /** Fraction of the storage quota in use, when the browser reports it. */
   usage: number | null;
+  /** Saved device data that couldn't be read; set aside, never deleted. */
+  unreadable: string[];
 };
 export const useStorageHealth = create<StorageHealth>(() => ({
   writeError: null,
   persisted: null,
   usage: null,
+  unreadable: [],
 }));
 
 function writeFailed(err: unknown) {
@@ -55,30 +59,47 @@ export const accountStorage: StateStorage = {
   getItem: async (name) => {
     const key = scopedKey(name);
     if (!hasIdb() || !key) return null;
-    const value = (await get<string>(key)) ?? null;
-    return value ?? (await adoptLegacy(name, key));
+    const value = (await get<string>(key)) ?? (await adoptLegacy(name, key));
+    if (value == null || readable(name, value)) return value;
+    await setAside(name, key, value);
+    return null;
   },
   setItem: async (name, value) => {
     if (switching) return;
-    const key = scopedKey(name);
-    if (!key) {
-      early.set(name, value);
-      return;
-    }
-    if (!hasIdb()) return;
-    try {
-      await set(key, value);
-      if (useStorageHealth.getState().writeError) useStorageHealth.setState({ writeError: null });
-    } catch (err) {
-      writeFailed(err);
-      throw err;
-    }
+    // Only the leading tab writes the workout; the others show it read-only.
+    if (name === "reptr-active-workout" && !isLeader()) return;
+    // Stores shared by every tab are only written under a lock (see writeShared).
+    if (SHARED.has(name)) return;
+    await write(name, value);
   },
   removeItem: async (name) => {
     const key = scopedKey(name);
     if (hasIdb() && key) await del(key);
   },
 };
+
+/** Stores that any tab may change; written only through writeShared, under a lock. */
+const SHARED = new Set(["reptr-outbox"]);
+
+async function write(name: string, value: string) {
+  const key = scopedKey(name);
+  if (!key) {
+    early.set(name, value);
+    return;
+  }
+  if (!hasIdb()) return;
+  try {
+    await set(key, value);
+    announceChange(name);
+    if (useStorageHealth.getState().writeError) useStorageHealth.setState({ writeError: null });
+  } catch (err) {
+    writeFailed(err);
+    throw err;
+  }
+}
+
+/** Saves a shared store. Call only while holding its lock (withStoreLock). */
+export const writeShared = (name: string, value: string) => write(name, value);
 
 /**
  * Before device data was kept per account, it was stored under the bare store name.
@@ -94,13 +115,67 @@ async function adoptLegacy(name: string, key: string) {
   return legacy;
 }
 
-type Rehydratable = { persist: { rehydrate: () => Promise<void> | void } };
+/** Checks a saved value has the shape its store expects. */
+type Validator = (state: Record<string, unknown>) => boolean;
+const validators = new Map<string, Validator>();
+
+function readable(name: string, value: unknown) {
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : null;
+    const state = parsed?.state;
+    if (!state || typeof state !== "object" || Array.isArray(state)) return false;
+    return validators.get(name)?.(state) ?? true;
+  } catch {
+    return false;
+  }
+}
+
+/** Prefix for saved data that couldn't be read. Kept under the account until wiped. */
+export const UNREADABLE_PREFIX = "reptr-unreadable/";
+
+/**
+ * A saved copy that can't be read (cut short by a crash, or from a build with a different
+ * shape) would otherwise break the app on every load. It is moved aside, under the same
+ * account, so the app starts clean and the person can still download it.
+ */
+async function setAside(name: string, key: string, value: unknown) {
+  const id = key.slice(name.length + 1);
+  await set(`${UNREADABLE_PREFIX}${name}/${Date.now()}:${id}`, value);
+  await del(key);
+  useStorageHealth.setState((s) => ({ unreadable: [...new Set([...s.unreadable, name])] }));
+}
+
+/** Data set aside for the current account, as one JSON document to download. */
+export async function unreadableData() {
+  if (!hasIdb() || !account) return null;
+  const mine = (await keys())
+    .map(String)
+    .filter((k) => k.startsWith(UNREADABLE_PREFIX) && k.endsWith(`:${account}`));
+  const entries = await Promise.all(mine.map(async (k) => [k, await get(k)] as const));
+  return { format: "reptr-unreadable-v1", account, entries: Object.fromEntries(entries) };
+}
+
+type Rehydratable = {
+  persist: { rehydrate: () => Promise<void> | void; getOptions: () => { name?: string } };
+};
 const stores: { reset: () => void; store: Rehydratable }[] = [];
 
 /** Each device store registers itself so it can be reloaded when the account changes. */
-export function registerAccountStore(store: Rehydratable, reset: () => void) {
+export function registerAccountStore(store: Rehydratable, reset: () => void, validate?: Validator) {
   stores.push({ store, reset });
+  const name = store.persist.getOptions().name;
+  if (name && validate) validators.set(name, validate);
 }
+
+const reloadAll = async () => {
+  await Promise.all(stores.map((s) => s.store.persist.rehydrate()));
+};
+
+// Another tab saved: reload that store here so this tab shows the latest.
+onOtherTabChange((name) => {
+  for (const s of stores)
+    if (s.store.persist.getOptions().name === name) s.store.persist.rehydrate();
+});
 
 /**
  * Points the device stores at an account. A different account than before starts from
@@ -118,9 +193,10 @@ export async function switchAccount(id: string) {
     }
   }
   account = id;
-  for (const [name, value] of early) await accountStorage.setItem(name, value);
+  for (const [name, value] of early) await write(name, value);
   early.clear();
-  await Promise.all(stores.map((s) => s.store.persist.rehydrate()));
+  await reloadAll();
+  joinTabs(id, reloadAll);
   await rememberAccount(id);
 }
 
@@ -149,7 +225,11 @@ export async function clearPageCaches() {
 /** Deletes everything this device holds for an account. */
 export async function wipeAccount(id: string) {
   if (hasIdb()) {
-    await Promise.all(ACCOUNT_STORES.map((name) => del(scopedKey(name, id)!)));
+    // Every key stored under the account: the stores and anything set aside.
+    const mine = (await keys()).map(String).filter((k) => k.endsWith(`:${id}`));
+    await Promise.all(
+      [...ACCOUNT_STORES.map((name) => scopedKey(name, id)!), ...mine].map((k) => del(k)),
+    );
   }
   try {
     if (localStorage.getItem(LAST_ACCOUNT) === id) localStorage.removeItem(LAST_ACCOUNT);
