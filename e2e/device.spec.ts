@@ -64,20 +64,20 @@ test("sets logged offline after the workout was finished elsewhere are kept and 
   browser,
 }) => {
   // The phone starts the workout and logs a set.
-  await startWithExercise(page, "barbell bench", /^Barbell Bench Press/);
-  await logSet(page, 1, "60", "8");
+  await startWithExercise(page, "goblet squat", /^Goblet Squat/);
+  await logSet(page, 1, "24", "8");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
   // The laptop (its own browser storage) picks the same workout up.
   const laptopContext = await browser.newContext();
   const laptop = await laptopContext.newPage();
   await laptop.goto("/workout");
-  await expect(laptop.getByLabel("Weight").first()).toHaveValue("60");
+  await expect(laptop.getByLabel("Weight").first()).toHaveValue("24");
 
   // The phone loses signal and logs another set...
   await page.context().setOffline(true);
   await page.getByRole("button", { name: "Add set" }).first().click();
-  await logSet(page, 2, "62.5", "6");
+  await logSet(page, 2, "26", "6");
   await expect(page.getByText("Offline, saved on this device")).toBeVisible();
 
   // ...while the laptop finishes the workout.
