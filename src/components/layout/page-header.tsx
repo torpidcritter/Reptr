@@ -1,6 +1,5 @@
-import { CircleUser } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { NotificationBell } from "./notification-bell";
 
 export function PageHeader({
   title,
@@ -19,14 +18,7 @@ export function PageHeader({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {action}
-        {/* Phones have no sidebar, so profile and settings sit here instead of a sixth tab. */}
-        <Link
-          href="/profile"
-          aria-label="Profile and settings"
-          className="text-muted-foreground hover:text-foreground -mr-2 flex size-10 items-center justify-center rounded-full md:hidden"
-        >
-          <CircleUser className="size-6" />
-        </Link>
+        <NotificationBell />
       </div>
     </header>
   );

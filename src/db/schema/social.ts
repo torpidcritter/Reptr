@@ -62,6 +62,8 @@ export const socialProfiles = pgTable(
     visibility: accountVisibility("visibility").notNull().default("private"),
     /** Shown in search and suggestions. Off: reachable only by exact handle. */
     discoverable: boolean("discoverable").notNull().default(true),
+    /** Appear on leaderboards (to people who can see this profile). Off unless chosen. */
+    leaderboards: boolean("leaderboards").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -78,7 +80,7 @@ export const socialProfiles = pgTable(
     pgPolicy("social_profiles_read", {
       for: "select",
       to: authenticatedRole,
-      using: sql`${isOwner(t.userId)} or not ${blocked(t.userId)}`,
+      using: sql`${isOwner(t.userId)} or (not ${blocked(t.userId)} and not public.social_suspended(${t.userId}))`,
     }),
     pgPolicy("social_profiles_owner_write", {
       for: "all",

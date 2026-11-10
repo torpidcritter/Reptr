@@ -96,3 +96,31 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Web Push: show what the server sent (who did what, never training data) and open the
+// app at the right page when it's tapped.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  const url =
+    typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/notifications";
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Reptr", {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/notifications";
+  // A new window rather than steering an open one, which might be mid-workout.
+  event.waitUntil(self.clients.openWindow(url));
+});

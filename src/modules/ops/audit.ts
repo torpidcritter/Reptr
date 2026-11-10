@@ -22,6 +22,10 @@ export const auditLabels = {
   user_blocked: "Blocked someone",
   workout_shared: "Shared a workout",
   report_made: "Reported something",
+  group_created: "Created a group",
+  group_deleted: "Deleted a group",
+  challenge_created: "Created a challenge",
+  moderation_decision: "Made a moderation decision",
 } as const;
 
 export type AuditAction = keyof typeof auditLabels;

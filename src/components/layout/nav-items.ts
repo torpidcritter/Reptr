@@ -1,22 +1,36 @@
-import { Bot, CalendarDays, Dumbbell, House, TrendingUp, Users } from "lucide-react";
+import { CircleUser, Dumbbell, Flag, House, Trophy, Users } from "lucide-react";
 
-/** The main destinations. Everything else lives one level under one of them. */
+/**
+ * The six main destinations. Everything else lives one level under one of them.
+ * `short` is what fits under an icon on a phone; it's part of the full label, so
+ * screen readers and voice control can use either.
+ */
 export const navItems = [
-  { href: "/", label: "Today", icon: House },
-  { href: "/train", label: "Train", icon: Dumbbell },
-  { href: "/social", label: "Social", icon: Users },
-  { href: "/progress", label: "Progress", icon: TrendingUp },
-  { href: "/plan", label: "Plan", icon: CalendarDays },
-  { href: "/coach", label: "Coach", icon: Bot },
+  { href: "/", label: "Home", short: "Home", icon: House },
+  { href: "/train", label: "Workouts", short: "Workouts", icon: Dumbbell },
+  { href: "/social", label: "Social", short: "Social", icon: Users },
+  { href: "/leaderboards", label: "Leaderboards", short: "Boards", icon: Trophy },
+  { href: "/challenges", label: "Challenges", short: "Challenges", icon: Flag },
+  { href: "/profile", label: "Profile", short: "Profile", icon: CircleUser },
 ] as const;
 
 /** Pages that belong under a main destination, so its tab stays highlighted. */
 const sections: Record<string, string[]> = {
-  "/": ["/nutrition", "/recovery"],
-  "/train": ["/workout", "/routines", "/exercises"],
-  "/progress": ["/history", "/insights", "/physique", "/achievements", "/timeline"],
-  "/plan": ["/programs", "/goals"],
-  "/social": ["/u"],
+  "/": ["/nutrition", "/recovery", "/coach", "/notifications"],
+  "/train": [
+    "/workout",
+    "/routines",
+    "/exercises",
+    "/history",
+    "/progress",
+    "/insights",
+    "/timeline",
+    "/plan",
+    "/programs",
+    "/goals",
+  ],
+  "/social": ["/u", "/groups"],
+  "/profile": ["/achievements", "/physique", "/admin"],
 };
 
 export function isActive(pathname: string, href: string) {

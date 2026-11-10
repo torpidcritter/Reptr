@@ -32,6 +32,7 @@ export default defineConfig({
       DATABASE_URL: e2eDatabaseUrl,
       REPTR_DEV_USER_ID: e2eUserId,
       REPTR_E2E: "1",
+      REPTR_MODERATOR_IDS: e2eUserId,
       NEXT_PUBLIC_SUPABASE_URL: "",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
     },

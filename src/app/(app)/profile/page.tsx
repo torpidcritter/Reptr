@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
+import { isModerator } from "@/modules/community/moderation";
 import { recentAudit } from "@/modules/ops/audit";
 import { deleteAccountAction, signOut } from "./actions";
 import { SignOutButton } from "./sign-out-button";
@@ -89,8 +90,13 @@ async function ProfileBody() {
                 ...(profile?.trackNutrition ? [{ href: "/nutrition", label: "Nutrition" }] : []),
                 ...(profile?.trackRecovery ? [{ href: "/recovery", label: "Recovery" }] : []),
                 { href: "/physique", label: "Body and weight" },
-                { href: "/achievements", label: "Achievements" },
+                { href: "/achievements", label: "Level, badges and achievements" },
+                { href: "/social/profile", label: "Social profile and privacy" },
+                { href: "/notifications", label: "Notifications" },
                 { href: "/timeline", label: "Timeline" },
+                ...(isModerator(user.id)
+                  ? [{ href: "/admin/reports", label: "Reports to review" }]
+                  : []),
               ].map((l) => (
                 <Link
                   key={l.href}

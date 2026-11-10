@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
 import { log } from "@/lib/log";
+import { syncAwardsQuietly } from "@/modules/community/awards";
 import { audit } from "@/modules/ops/audit";
 // Keeps a shared post in step with a corrected workout.
 import "@/modules/social/hooks";
@@ -36,6 +37,7 @@ export async function correctWorkoutAction(snapshot: unknown): Promise<Correctio
     log.error("workout_correction_failed", { err });
     return { ok: false, error: "The correction couldn't be saved. Nothing was changed." };
   }
+  await syncAwardsQuietly(db, user.id);
   changed();
   return { ok: true };
 }
@@ -55,6 +57,7 @@ export async function deleteWorkoutAction(id: string): Promise<CorrectionResult>
     log.error("workout_delete_failed", { err });
     return { ok: false, error: "The workout couldn't be deleted. Nothing was changed." };
   }
+  await syncAwardsQuietly(db, user.id);
   changed();
   return { ok: true };
 }

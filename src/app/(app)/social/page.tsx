@@ -1,4 +1,4 @@
-import { Inbox, Search, UserCog, Users } from "lucide-react";
+import { Inbox, Search, UserCog, Users, UsersRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -58,6 +58,9 @@ async function Feed({ after }: { after?: string }) {
           className={buttonVariants({ variant: "outline", size: "sm" })}
         >
           <Inbox /> Requests{requests.length > 0 && ` (${requests.length})`}
+        </Link>
+        <Link href="/groups" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <UsersRound /> Groups
         </Link>
         <Link
           href={`/u/${me.handle}`}

@@ -85,8 +85,6 @@ Privacy is enforced in the database, not only in the app.
 
 The avatars bucket policies apply only on Supabase. They are not exercised by the local tests, which use a stand-in storage schema.
 
-## Not built yet (Stage E)
+## Built on top (Stage E)
 
-- Leaderboards, challenges, groups, XP and badges.
-- Notifications.
-- The moderation queue for reports.
+Leaderboards, challenges, groups, XP and badges, notifications and moderation are described in [LEADERBOARDS.md](LEADERBOARDS.md).

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { syncAwardsQuietly } from "@/modules/community/awards";
 import { z } from "zod";
 import { overLimit } from "@/lib/guard";
 import { log, timed } from "@/lib/log";
@@ -64,7 +65,11 @@ export async function saveWorkoutAction(
       return { ok: false, kind: "validation", error: e.message };
     return failure("workout_save_failed", e);
   }
-  if (parsed.data.status === "completed") revalidatePath("/", "layout");
+  if (parsed.data.status === "completed") {
+    // XP, badges and challenge progress, worked out from what was just saved.
+    await syncAwardsQuietly(db, user.id);
+    revalidatePath("/", "layout");
+  }
   if (out.merged) log.info("workout_merged", { workoutId: parsed.data.id });
   return {
     ok: true,

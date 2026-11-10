@@ -26,6 +26,10 @@ export const limits = {
   comment: { max: 60, windowSec: 10 * 60 },
   report: { max: 20, windowSec: 24 * 3600 },
   search: { max: 120, windowSec: 10 * 60 },
+  /** Creating groups and challenges, and joining them. */
+  community: { max: 60, windowSec: 3600 },
+  /** Moderator decisions, as a brake on a stolen moderator session. */
+  moderate: { max: 200, windowSec: 3600 },
 } as const;
 
 export type LimitName = keyof typeof limits;

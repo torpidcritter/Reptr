@@ -48,6 +48,7 @@ export async function saveProfileAction(
     bio: String(form.get("bio") ?? ""),
     visibility: form.get("visibility") === "public" ? ("public" as const) : ("private" as const),
     discoverable: form.get("discoverable") === "on",
+    leaderboards: form.get("leaderboards") === "on",
   };
   const busy = await overLimit(user.id, "write");
   if (busy) return { error: busy, values };

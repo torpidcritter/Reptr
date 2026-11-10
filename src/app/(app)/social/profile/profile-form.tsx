@@ -84,6 +84,21 @@ export function ProfileForm({ initial, isNew }: { initial: ProfileInput; isNew: 
         <input type="checkbox" name="discoverable" defaultChecked={v.discoverable !== false} />
         <span className="text-sm">Show me in search and suggestions</span>
       </label>
+      <label className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          name="leaderboards"
+          defaultChecked={v.leaderboards !== false}
+          className="mt-1"
+        />
+        <span className="text-sm">
+          Show me on leaderboards
+          <span className="text-muted-foreground block text-xs">
+            Your workout count, volume, sets, time, XP, streak and best lifts, to people who can see
+            your profile. Challenges you join show your score to the other people in them.
+          </span>
+        </span>
+      </label>
       <p className="text-muted-foreground text-xs">
         Your name comes from your account settings. Your birth date, height, body measurements,
         photos and nutrition are never shown to anyone.

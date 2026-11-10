@@ -4,6 +4,8 @@ import {
   auditLog,
   blocks,
   bodyMetrics,
+  challengeMembers,
+  challenges,
   coachMemories,
   comments,
   coachUsage,
@@ -13,6 +15,10 @@ import {
   exercises,
   foodEntries,
   goals,
+  groupMembers,
+  groups,
+  notifications,
+  notificationSettings,
   nutritionTargets,
   personalRecords,
   postLikes,
@@ -25,6 +31,9 @@ import {
   routines,
   savedFoods,
   socialProfiles,
+  socialSanctions,
+  userBadges,
+  userLevels,
   userGoals,
   waterEntries,
   workoutExercises,
@@ -78,12 +87,38 @@ export const exportSections = {
   likes: { table: postLikes, owner: postLikes.userId, order: postLikes.createdAt },
   comments: { table: comments, owner: comments.authorId, order: comments.createdAt },
   reportsMade: { table: reports, owner: reports.reporterId, order: reports.createdAt },
+  groupsOwned: { table: groups, owner: groups.ownerId, order: groups.createdAt },
+  groupMemberships: {
+    table: groupMembers,
+    owner: groupMembers.userId,
+    order: groupMembers.joinedAt,
+  },
+  challengesCreated: {
+    table: challenges,
+    owner: challenges.creatorId,
+    order: challenges.createdAt,
+  },
+  challengeMemberships: {
+    table: challengeMembers,
+    owner: challengeMembers.userId,
+    order: challengeMembers.joinedAt,
+  },
+  badges: { table: userBadges, owner: userBadges.userId, order: userBadges.earnedOn },
+  level: { table: userLevels, owner: userLevels.userId },
+  notifications: {
+    table: notifications,
+    owner: notifications.userId,
+    order: notifications.createdAt,
+  },
+  notificationSettings: { table: notificationSettings, owner: notificationSettings.userId },
+  moderationDecisions: { table: socialSanctions, owner: socialSanctions.userId },
 } satisfies Record<string, Section>;
 
 /** Tables with a user column that are deliberately left out, and why. */
 export const notExported: Record<string, string> = {
   applied_ops: "Sync bookkeeping: ids of offline changes already applied, no content.",
   rate_limits: "Request counters keyed by hashes, kept for minutes.",
+  push_subscriptions: "Browser push addresses and keys: device secrets, not something you logged.",
 };
 
 export type ExportSection = keyof typeof exportSections;
