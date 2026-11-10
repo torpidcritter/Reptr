@@ -64,6 +64,8 @@ export const accountStorage: StateStorage = {
     if (!hasIdb() || !key) return null;
     const raw = (await get<string>(key)) ?? (await adoptLegacy(name, key));
     if (raw == null) return null;
+    // Encrypted, but this session has no key: leave it untouched for when it does.
+    if (isSealed(raw) && !sealKey) return null;
     const value = await openValue(raw);
     if (value != null && readable(name, value)) {
       // Saved before encryption existed: encrypt it now.
@@ -98,6 +100,9 @@ async function write(name: string, value: string) {
   }
   if (!hasIdb()) return;
   try {
+    // Without the key, never replace a copy that was stored encrypted: it is opened again
+    // once the key is back.
+    if (!sealKey && isSealed(await get(key))) return;
     await set(key, sealKey ? await seal(sealKey, value) : value);
     announceChange(name);
     if (useStorageHealth.getState().writeError) useStorageHealth.setState({ writeError: null });

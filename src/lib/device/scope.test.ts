@@ -170,3 +170,25 @@ describe("encrypted device data", () => {
     expect(Object.values((await unreadableData())!.entries)).toEqual([sealed]);
   });
 });
+
+describe("device data when the key can't be fetched", () => {
+  it("leaves encrypted data untouched until the key is back", async () => {
+    const key = Buffer.alloc(32, 3).toString("base64");
+    const hal = randomUUID();
+    await switchAccount(hal, key);
+    useWorkoutStore.getState().start({ ...emptyWorkout(), name: "Kept safe" });
+    await flush();
+    const sealed = await get<string>(scopedKey("reptr-active-workout", hal)!);
+
+    await switchAccount(randomUUID(), key);
+    await switchAccount(hal); // no key this time
+    expect(useWorkoutStore.getState().workout).toBeNull();
+    useWorkoutStore.getState().start(emptyWorkout());
+    await flush();
+    expect(await get<string>(scopedKey("reptr-active-workout", hal)!)).toBe(sealed);
+
+    await switchAccount(randomUUID(), key);
+    await switchAccount(hal, key);
+    expect(useWorkoutStore.getState().workout?.name).toBe("Kept safe");
+  });
+});
