@@ -19,6 +19,13 @@ export const limits = {
   loginCode: { max: 8, windowSec: 15 * 60 },
   clientError: { max: 30, windowSec: 10 * 60 },
   accountDelete: { max: 3, windowSec: 3600 },
+  /** Social: follows and requests, posts, likes, comments, reports. */
+  follow: { max: 60, windowSec: 3600 },
+  post: { max: 30, windowSec: 3600 },
+  like: { max: 300, windowSec: 3600 },
+  comment: { max: 60, windowSec: 10 * 60 },
+  report: { max: 20, windowSec: 24 * 3600 },
+  search: { max: 120, windowSec: 10 * 60 },
 } as const;
 
 export type LimitName = keyof typeof limits;

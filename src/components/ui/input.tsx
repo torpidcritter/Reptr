@@ -24,3 +24,15 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
     />
   );
 }
+
+export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+  return (
+    <textarea
+      className={cn(
+        "bg-background placeholder:text-muted-foreground focus-visible:ring-ring aria-invalid:border-danger w-full rounded-xl border px-3 py-2 text-base outline-none focus-visible:ring-2",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

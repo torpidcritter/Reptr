@@ -4,29 +4,13 @@ import { Camera, Trash2 } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
+import { shrinkImage } from "@/lib/images";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { PHOTO_LIMIT, photoBucket, photoLimitMessage } from "@/modules/body/metrics";
 import { addPhotoAction, deletePhotoAction } from "./actions";
 import { useConfirm } from "@/components/ui/confirm";
 
 export type Photo = { id: string; pose: string; takenOn: string; url: string | null };
-
-/** Shrinks a photo to at most 1600px on the long side as JPEG, and drops its metadata (GPS etc.). */
-async function shrink(file: File): Promise<Blob> {
-  const img = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(img.width * scale);
-  canvas.height = Math.round(img.height * scale);
-  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return new Promise((res, rej) =>
-    canvas.toBlob(
-      (b) => (b ? res(b) : rej(new Error("Couldn't read that image"))),
-      "image/jpeg",
-      0.85,
-    ),
-  );
-}
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const fmt = (d: string) =>
@@ -59,7 +43,7 @@ export function Photos({
         setError(null);
         // Storage refuses uploads past the limit too; this just says why up front.
         if (photos.length >= PHOTO_LIMIT) throw new Error(photoLimitMessage);
-        const blob = await shrink(file);
+        const blob = await shrinkImage(file);
         const path = `${userId}/${crypto.randomUUID()}.jpg`;
         const { error: upErr } = await createSupabaseBrowserClient()
           .storage.from(photoBucket)

@@ -7,6 +7,8 @@ import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
 import { log } from "@/lib/log";
 import { audit } from "@/modules/ops/audit";
+// Keeps a shared post in step with a corrected workout.
+import "@/modules/social/hooks";
 import { correctWorkout, deleteFinishedWorkout } from "@/modules/workouts/corrections";
 import { workoutSnapshotSchema } from "@/modules/workouts/snapshot";
 import { WorkoutValidationError } from "@/modules/workouts/workouts";

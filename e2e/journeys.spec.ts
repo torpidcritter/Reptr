@@ -144,6 +144,7 @@ test("@phone the bottom bar reaches every section", async ({ page }) => {
   const bar = page.getByRole("navigation").last();
   for (const [name, path] of [
     ["Train", "/train"],
+    ["Social", "/social"],
     ["Progress", "/progress"],
     ["Plan", "/plan"],
     ["Coach", "/coach"],
