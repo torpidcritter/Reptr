@@ -1,0 +1,44 @@
+name: Supabase staging
+
+# Runs the integration tests against a real Supabase staging project (never production):
+# real sign-in tokens, storage policies, signed URLs and account deletion. Manual, and
+# nightly once the STAGING_* secrets exist. See docs/ops/STAGING_TESTS.md.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 20 * * *"
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    env:
+      STAGING_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - name: Check the staging secrets are set
+        run: |
+          if [ -z "$STAGING_SUPABASE_URL" ]; then
+            echo "::warning::STAGING_* secrets are not set; nothing to run. See docs/ops/STAGING_TESTS.md"
+            echo "skip=1" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/checkout@v4
+        if: env.skip != '1'
+      - uses: pnpm/action-setup@v4
+        if: env.skip != '1'
+      - uses: actions/setup-node@v4
+        if: env.skip != '1'
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: env.skip != '1'
+      - name: Apply migrations to staging
+        if: env.skip != '1'
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      - run: pnpm vitest run src/integration
+        if: env.skip != '1'

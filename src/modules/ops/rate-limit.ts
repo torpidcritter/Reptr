@@ -13,6 +13,10 @@ export const limits = {
   export: { max: 10, windowSec: 3600 },
   /** Sign-in emails, keyed by address. */
   login: { max: 5, windowSec: 15 * 60 },
+  /** Sign-in emails from one network address, so one client can't mail many people. */
+  loginIp: { max: 20, windowSec: 60 * 60 },
+  /** Guesses at the six-digit sign-in code, keyed by address. */
+  loginCode: { max: 8, windowSec: 15 * 60 },
   clientError: { max: 30, windowSec: 10 * 60 },
   accountDelete: { max: 3, windowSec: 3600 },
 } as const;

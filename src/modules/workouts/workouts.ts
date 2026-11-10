@@ -5,15 +5,49 @@ import { recordPersonalRecords } from "@/modules/analytics/records";
 import { mergeWorkouts } from "./merge";
 import type { ExerciseSnapshot, SetSnapshot, WorkoutSnapshot } from "./snapshot";
 
-export class WorkoutLockedError extends Error {}
+import type { SyncConflict } from "@/modules/sync/conflict";
+
+export type { SyncConflict };
+
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+export class WorkoutConflictError extends Error {
+  constructor(readonly conflict: SyncConflict) {
+    super(conflictMessage(conflict));
+    this.name = "WorkoutConflictError";
+  }
+}
+
+/** A snapshot the server can't accept as it is, such as an exercise it doesn't know. */
+export class WorkoutValidationError extends Error {}
+
+function conflictMessage(c: SyncConflict) {
+  if (c.kind === "finished_elsewhere") return "This workout was already finished on another device";
+  if (c.kind === "active_elsewhere") return "Another workout is in progress on another device";
+  return "This workout belongs to a different account";
+}
+
+/**
+ * How a device identifies itself when saving. `takeOver` is only sent after the person
+ * chose to finish the workout running on another device and continue with this one.
+ */
+export type SyncInfo = { deviceId: string; baseVersion: number | null; takeOver?: boolean };
+
+/** Completed sets in the device's copy that the server's copy doesn't have. */
+export function unsyncedSets(server: WorkoutSnapshot, device: WorkoutSnapshot) {
+  const known = new Set(server.exercises.flatMap((e) => e.sets.map((s) => s.id)));
+  return device.exercises.flatMap((e) =>
+    e.sets.filter((s) => s.completedAt && !known.has(s.id)).map((s) => s.id),
+  );
+}
 
 /**
  * Saves the device's copy of a workout. While it's in progress the server copy is
- * replaced wholesale. Once completed or abandoned it's locked: a repeat of the same
- * finish is accepted (a retry), anything else is refused.
+ * replaced wholesale (or combined, when another device saved in between). Once
+ * completed or abandoned it's locked: a copy with nothing new is accepted as a retry,
+ * a copy with sets the server never got is refused as a conflict, so the device can
+ * keep them and offer to save them separately.
  */
-export type SyncInfo = { deviceId: string; baseVersion: number | null };
-
 export async function saveWorkoutSnapshot(
   db: Database,
   userId: string,
@@ -34,17 +68,32 @@ export async function saveWorkoutSnapshot(
           or(isNull(exercises.ownerId), eq(exercises.ownerId, userId)),
         ),
       );
-    if (visible.length !== ids.length) throw new Error("Unknown exercise");
+    if (visible.length !== ids.length) throw new WorkoutValidationError("Unknown exercise");
   }
 
   return db.transaction(async (tx) => {
     const [existing] = await tx.select().from(workouts).where(eq(workouts.id, w.id)).for("update");
 
-    if (existing && existing.userId !== userId) throw new WorkoutLockedError("Not your workout");
+    if (existing && existing.userId !== userId) {
+      throw new WorkoutConflictError({ kind: "wrong_account" });
+    }
     if (existing && (existing.status === "completed" || existing.status === "abandoned")) {
-      if (existing.status === w.status)
-        return { status: existing.status, version: existing.version };
-      throw new WorkoutLockedError("This workout is already finished");
+      const server = await loadSnapshot(tx as unknown as Database, existing);
+      const missing = unsyncedSets(server, w);
+      if (missing.length) {
+        throw new WorkoutConflictError({
+          kind: "finished_elsewhere",
+          status: existing.status,
+          unsyncedSetIds: missing,
+        });
+      }
+      // Nothing here the server doesn't have: a retry of the finish, or a stale copy.
+      return {
+        status: existing.status,
+        version: existing.version,
+        merged: undefined,
+        alreadyFinished: existing.status !== w.status,
+      };
     }
 
     // Another device saved since this one last heard from the server: combine the two
@@ -65,18 +114,32 @@ export async function saveWorkoutSnapshot(
     const finishing = w.status === "completed" || w.status === "abandoned";
     const finishedAt = finishing ? new Date(w.finishedAt ?? Date.now()) : null;
 
-    // One workout in progress at a time: a newer one from this device wins.
+    // One workout in progress at a time. A newer one from the same device replaces an
+    // older one from that device (the device itself moved on). One from another device
+    // is never ended silently: the person decides, and if they choose to take over, it's
+    // finished with its logged sets kept, not thrown away.
     if (!finishing) {
-      await tx
-        .update(workouts)
-        .set({ status: "abandoned", finishedAt: new Date() })
+      const others = await tx
+        .select()
+        .from(workouts)
         .where(
           and(
             eq(workouts.userId, userId),
             ne(workouts.id, w.id),
             inArray(workouts.status, ["active", "paused"]),
           ),
-        );
+        )
+        .for("update");
+      for (const other of others) {
+        const sameDevice = sync && other.deviceId === sync.deviceId;
+        if (!sameDevice && !sync?.takeOver) {
+          throw new WorkoutConflictError({
+            kind: "active_elsewhere",
+            other: { id: other.id, name: other.name, startedAt: other.startedAt.toISOString() },
+          });
+        }
+        await endInProgress(tx, userId, other);
+      }
     }
 
     const row = {
@@ -136,8 +199,45 @@ export async function saveWorkoutSnapshot(
       if (sets.length) await tx.insert(workoutSets).values(sets);
     }
     if (w.status === "completed") await recordPersonalRecords(tx, userId, finishedAt!, kept);
-    return { status: w.status, version, merged };
+    return { status: w.status, version, merged, alreadyFinished: false };
   });
+}
+
+/**
+ * Ends a workout that's in progress so another can start: finished with the sets that
+ * were done, or abandoned if none were. Logged sets are never dropped.
+ */
+async function endInProgress(tx: Tx, userId: string, row: typeof workouts.$inferSelect) {
+  const db = tx as unknown as Database;
+  const snap = await loadSnapshot(db, row);
+  const anyDone = snap.exercises.some((e) => e.sets.some((s) => s.completedAt));
+  const finishedAt = new Date();
+  await db
+    .update(workouts)
+    .set({
+      status: anyDone ? "completed" : "abandoned",
+      finishedAt,
+      version: row.version + 1,
+    })
+    .where(eq(workouts.id, row.id));
+  if (!anyDone) return;
+  // Same rule as a normal finish: only the sets that were done are kept.
+  await db.delete(workoutSets).where(
+    and(
+      eq(workoutSets.userId, userId),
+      isNull(workoutSets.completedAt),
+      inArray(
+        workoutSets.workoutExerciseId,
+        snap.exercises.map((e) => e.id),
+      ),
+    ),
+  );
+  const kept = snap.exercises
+    .map((e) => ({ ...e, sets: e.sets.filter((s) => s.completedAt) }))
+    .filter((e) => e.sets.length);
+  const empty = snap.exercises.filter((e) => !e.sets.some((s) => s.completedAt)).map((e) => e.id);
+  if (empty.length) await db.delete(workoutExercises).where(inArray(workoutExercises.id, empty));
+  await recordPersonalRecords(tx, userId, finishedAt, kept);
 }
 
 /** The workout in progress on the server, if any, as a snapshot (for resuming on another device). */

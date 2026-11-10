@@ -16,7 +16,7 @@ import {
   getPreviousPerformance,
   getWorkout,
   saveWorkoutSnapshot,
-  WorkoutLockedError,
+  WorkoutConflictError,
 } from "./workouts";
 
 const done = (w: WorkoutSnapshot, ...exerciseIdx: number[]) => {
@@ -199,10 +199,11 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     expect(saved.plannedSets).toBe(5); // 3 bench + 2 row were planned
     expect(summarize(saved)).toEqual({ sets: 2, volumeKg: 60 * 8 + 60 * 7, exercises: 1 });
 
-    await expect(
-      saveWorkoutSnapshot(t.db, alice, { ...w, status: "active" }),
-    ).rejects.toBeInstanceOf(WorkoutLockedError);
+    // A stale copy with nothing new is accepted without changing anything.
+    const stale = await saveWorkoutSnapshot(t.db, alice, { ...w, status: "active" });
+    expect(stale).toMatchObject({ status: "completed", alreadyFinished: true });
     expect(await getActiveWorkout(t.db, alice)).toBeNull();
+    expect((await getWorkout(t.db, alice, w.id))!.exercises[0].sets).toHaveLength(2);
   });
 
   it("returns last time's sets for each exercise", async () => {
@@ -243,13 +244,49 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     ]);
   });
 
-  it("abandons an older in-progress workout when a new one is saved", async () => {
+  it("replaces an older in-progress workout from the same device", async () => {
+    const phone = { deviceId: "phone-device-1", baseVersion: null };
     const a = emptyWorkout();
-    await saveWorkoutSnapshot(t.db, alice, a);
+    await saveWorkoutSnapshot(t.db, alice, a, phone);
     const b = emptyWorkout();
-    await saveWorkoutSnapshot(t.db, alice, b);
+    await saveWorkoutSnapshot(t.db, alice, b, phone);
     expect((await getActiveWorkout(t.db, alice))!.id).toBe(b.id);
     expect((await getWorkout(t.db, alice, a.id))!.status).toBe("abandoned");
+  });
+
+  it("never ends another device's workout without being asked, and keeps its sets when asked", async () => {
+    const dave = randomUUID();
+    await t.addUser(dave);
+    const onLaptop = emptyWorkout();
+    onLaptop.exercises.push(exerciseFor(bench(), { sets: 2 }));
+    onLaptop.exercises[0].sets[0] = {
+      ...onLaptop.exercises[0].sets[0],
+      weightKg: 70,
+      reps: 5,
+      completedAt: new Date().toISOString(),
+    };
+    await saveWorkoutSnapshot(t.db, dave, onLaptop, {
+      deviceId: "laptop-device",
+      baseVersion: null,
+    });
+
+    const onPhone = emptyWorkout();
+    const phone = { deviceId: "phone-device-1", baseVersion: null };
+    const err = await saveWorkoutSnapshot(t.db, dave, onPhone, phone).catch((e) => e);
+    expect(err).toBeInstanceOf(WorkoutConflictError);
+    expect(err.conflict).toMatchObject({ kind: "active_elsewhere", other: { id: onLaptop.id } });
+    expect((await getActiveWorkout(t.db, dave))!.id).toBe(onLaptop.id);
+
+    // The person chose to finish the laptop's workout and carry on on the phone.
+    await saveWorkoutSnapshot(t.db, dave, onPhone, { ...phone, takeOver: true });
+    expect((await getActiveWorkout(t.db, dave))!.id).toBe(onPhone.id);
+    const ended = (await getWorkout(t.db, dave, onLaptop.id))!;
+    expect(ended.status).toBe("completed");
+    expect(ended.exercises.map((e) => e.sets.map((s) => [s.weightKg, s.reps]))).toEqual([
+      [[70, 5]],
+    ]);
+    const prs = await exerciseRecords(t.db, dave, ex["barbell-bench-press"].id);
+    expect(prs.find((r) => r.type === "heaviest_weight")!.value).toBe(70);
   });
 
   it("stores personal records when a workout is finished", async () => {
@@ -278,9 +315,13 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
   });
 
   it("won't let another user overwrite a workout", async () => {
+    const frank = randomUUID();
+    await t.addUser(frank);
     const w = done(emptyWorkout());
-    await saveWorkoutSnapshot(t.db, alice, w);
-    await expect(saveWorkoutSnapshot(t.db, bob, w)).rejects.toBeInstanceOf(WorkoutLockedError);
+    await saveWorkoutSnapshot(t.db, frank, w);
+    const err = await saveWorkoutSnapshot(t.db, bob, w).catch((e) => e);
+    expect(err).toBeInstanceOf(WorkoutConflictError);
+    expect(err.conflict).toEqual({ kind: "wrong_account" });
   });
 
   it("combines a workout edited on two devices instead of overwriting", async () => {
@@ -318,5 +359,44 @@ describe.skipIf(!testDatabaseUrl)("saving workouts", () => {
     // A device that has seen the latest version just saves.
     const next = await saveWorkoutSnapshot(t.db, carol, saved, { ...laptop, baseVersion: 3 });
     expect(next).toMatchObject({ version: 4, merged: undefined });
+  });
+  it("refuses, and names, sets a device logged after the workout was finished elsewhere", async () => {
+    const erin = randomUUID();
+    await t.addUser(erin);
+    const w = emptyWorkout();
+    w.exercises.push(exerciseFor(bench(), { sets: 2 }));
+    w.exercises[0].sets[0] = {
+      ...w.exercises[0].sets[0],
+      weightKg: 50,
+      reps: 5,
+      completedAt: new Date().toISOString(),
+    };
+    const phone = { deviceId: "phone-device-1", baseVersion: null };
+    await saveWorkoutSnapshot(t.db, erin, w, phone);
+
+    // The laptop finishes it...
+    const finished = { ...structuredClone(w), status: "completed" as const };
+    finished.finishedAt = new Date().toISOString();
+    await saveWorkoutSnapshot(t.db, erin, finished, { deviceId: "laptop-device", baseVersion: 1 });
+
+    // ...while the phone, offline, logged another set.
+    const onPhone = structuredClone(w);
+    onPhone.exercises[0].sets[1] = {
+      ...onPhone.exercises[0].sets[1],
+      weightKg: 50,
+      reps: 5,
+      completedAt: new Date().toISOString(),
+    };
+    const err = await saveWorkoutSnapshot(t.db, erin, onPhone, { ...phone, baseVersion: 1 }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(WorkoutConflictError);
+    expect(err.conflict).toEqual({
+      kind: "finished_elsewhere",
+      status: "completed",
+      unsyncedSetIds: [onPhone.exercises[0].sets[1].id],
+    });
+    // The finished workout is untouched.
+    expect((await getWorkout(t.db, erin, w.id))!.exercises[0].sets).toHaveLength(1);
   });
 });

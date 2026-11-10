@@ -6,12 +6,15 @@ import { db } from "@/db";
 import { audit } from "@/modules/ops/audit";
 import { overLimit } from "@/lib/guard";
 import { requireUser } from "@/lib/auth";
-import { removeFiles } from "@/lib/supabase/storage";
+import { log } from "@/lib/log";
+import { removeFiles, removeOrphanedFiles } from "@/lib/supabase/storage";
 import {
   addPhoto,
   deleteMetric,
   deletePhoto,
   entrySchema,
+  getPhoto,
+  listPhotos,
   logEntry,
   logWeight,
   updateWeight,
@@ -71,16 +74,39 @@ export async function addPhotoAction(payload: unknown): Promise<{ error?: string
   if (!parsed.success) return { error: "That photo couldn't be saved." };
   await addPhoto(db, user.id, parsed.data);
   await audit(db, user.id, "photo_added");
+  await tidyPhotos(user.id);
   revalidatePath("/physique");
   return {};
 }
 
-export async function deletePhotoAction(id: string) {
+/**
+ * Deletes a photo: the file first, checked to be gone, then its row. If the file can't be
+ * removed the row stays, so the photo is still listed and the delete can be retried.
+ */
+export async function deletePhotoAction(id: string): Promise<{ error?: string }> {
   const user = await requireUser();
-  const row = await deletePhoto(db, user.id, id);
-  if (row) {
+  if (!z.uuid().safeParse(id).success) return { error: "That photo wasn't found." };
+  const row = await getPhoto(db, user.id, id);
+  if (!row) return {};
+  try {
     await removeFiles(photoBucket, [row.storagePath]);
-    await audit(db, user.id, "photo_deleted");
+  } catch (err) {
+    log.error("photo_delete_failed", { err });
+    return { error: "The photo couldn't be deleted. Nothing was changed; try again." };
   }
+  await deletePhoto(db, user.id, id);
+  await audit(db, user.id, "photo_deleted");
   revalidatePath("/physique");
+  return {};
+}
+
+/** Best effort: removes uploads in the user's folder that never got a row. */
+async function tidyPhotos(userId: string) {
+  try {
+    const known = (await listPhotos(db, userId)).map((p) => p.storagePath);
+    const removed = await removeOrphanedFiles(photoBucket, userId, known);
+    if (removed) log.info("orphan_photos_removed", { count: removed });
+  } catch (err) {
+    log.warn("orphan_photo_check_failed", { err });
+  }
 }

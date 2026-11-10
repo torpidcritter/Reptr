@@ -1,29 +1,26 @@
 "use client";
 
-import { del, get, set } from "idb-keyval";
 import { create } from "zustand";
-import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { SetSnapshot, WorkoutSnapshot } from "@/modules/workouts/snapshot";
 import { mergeWorkouts } from "@/modules/workouts/merge";
 import { emptySet } from "@/modules/workouts/snapshot";
+import type { SyncErrorKind } from "@/modules/sync/errors";
+import type { SyncConflict } from "@/modules/sync/conflict";
+import { accountStorage, registerAccountStore } from "./device/scope";
 
-// The active workout is kept in IndexedDB on the device, so a refresh, a closed tab
-// or a dead connection never loses a set. It syncs to the server in the background.
-
-const hasIdb = () => typeof indexedDB !== "undefined";
-
-export const idbStorage: StateStorage = {
-  getItem: async (name) => (hasIdb() ? ((await get<string>(name)) ?? null) : null),
-  setItem: async (name, value) => {
-    if (hasIdb()) await set(name, value);
-  },
-  removeItem: async (name) => {
-    if (hasIdb()) await del(name);
-  },
-};
+// The active workout is kept in IndexedDB on the device, under the signed-in account,
+// so a refresh, a closed tab or a dead connection never loses a set. It syncs to the
+// server in the background. It is only ever cleared once the server has every set, or
+// when the person explicitly discards it.
 
 export type RestTimer = { endsAt: number; duration: number } | null;
-export type SyncState = "saved" | "saving" | "offline" | "error";
+/**
+ * saved/saving/offline as you'd expect; error: the last save was refused and will be
+ * retried when something changes; conflict: the server can't take this copy and the
+ * person has to choose what happens to it; paused: waiting for a reload or sign-in.
+ */
+export type SyncState = "saved" | "saving" | "offline" | "error" | "conflict" | "paused";
 export type RemovedSet = { exerciseKey: string; set: SetSnapshot; index: number; at: number };
 
 type State = {
@@ -40,6 +37,15 @@ type State = {
   serverVersion: number | null;
   /** Set when this device's copy was combined with edits from another device. Not persisted. */
   mergedAt: number | null;
+  /** Why the server couldn't take this copy. Kept until the person resolves it. */
+  conflict: SyncConflict | null;
+  /** The last failed save, to explain the badge. Not persisted. */
+  lastError: { kind: SyncErrorKind; message: string } | null;
+  /**
+   * Set when the person chose to finish the workout running on another device and carry
+   * on with this one. Sent with the next save, then cleared.
+   */
+  takeOver: boolean;
 };
 
 type Actions = {
@@ -59,35 +65,52 @@ type Actions = {
   /** Takes the server's combined copy, keeping any edits made here since it was sent. */
   adoptMerged: (merged: WorkoutSnapshot, serverVersion: number) => void;
   setSync: (s: SyncState) => void;
+  setConflict: (c: SyncConflict | null) => void;
+  setError: (e: State["lastError"]) => void;
+  /** Resolves an "in progress on another device" conflict in favour of this device. */
+  takeOverHere: () => void;
+  /** Resolves a "finished on another device" conflict: the unsynced sets become their own workout. */
+  replaceWith: (w: WorkoutSnapshot) => void;
+};
+
+const empty: Omit<State, "hydrated"> = {
+  workout: null,
+  rest: null,
+  revision: 0,
+  syncedRevision: 0,
+  sync: "saved",
+  serverVersion: null,
+  mergedAt: null,
+  conflict: null,
+  lastError: null,
+  lastRemoved: null,
+  takeOver: false,
 };
 
 const clone = <T>(v: T): T => structuredClone(v);
 
+type Persisted = Pick<
+  State,
+  "workout" | "revision" | "syncedRevision" | "rest" | "serverVersion" | "conflict" | "takeOver"
+>;
+
 export const useWorkoutStore = create<State & Actions>()(
-  persist(
+  persist<State & Actions, [], [], Persisted>(
     (setState, getState) => ({
-      workout: null,
-      revision: 0,
-      syncedRevision: 0,
-      sync: "saved",
-      rest: null,
+      ...empty,
       hydrated: false,
-      lastRemoved: null,
-      serverVersion: null,
-      mergedAt: null,
 
       start: (w, serverVersion = null) =>
-        setState((s) => ({ workout: w, revision: s.revision + 1, rest: null, serverVersion })),
-      clear: () =>
-        setState({
-          workout: null,
+        setState((s) => ({
+          workout: w,
+          revision: s.revision + 1,
           rest: null,
-          revision: 0,
-          syncedRevision: 0,
-          sync: "saved",
-          serverVersion: null,
-          mergedAt: null,
-        }),
+          serverVersion,
+          conflict: null,
+          lastError: null,
+          takeOver: false,
+        })),
+      clear: () => setState({ ...empty }),
 
       edit: (fn) => {
         const w = getState().workout;
@@ -181,6 +204,7 @@ export const useWorkoutStore = create<State & Actions>()(
 
       markSynced: (revision, serverVersion) =>
         setState((s) => ({
+          takeOver: false,
           syncedRevision: Math.max(s.syncedRevision, revision),
           sync: revision >= s.revision ? "saved" : s.sync,
           serverVersion: serverVersion ?? s.serverVersion,
@@ -198,21 +222,60 @@ export const useWorkoutStore = create<State & Actions>()(
         }));
       },
       setSync: (sync) => setState({ sync }),
+      setConflict: (conflict) =>
+        setState({ conflict, sync: conflict ? "conflict" : getState().sync }),
+      setError: (lastError) => setState({ lastError }),
+      takeOverHere: () =>
+        setState((s) => ({
+          takeOver: true,
+          conflict: null,
+          lastError: null,
+          sync: "saving",
+          revision: s.revision + 1,
+        })),
+      replaceWith: (w) =>
+        setState((s) => ({
+          workout: w,
+          conflict: null,
+          lastError: null,
+          takeOver: false,
+          serverVersion: null,
+          sync: "saving",
+          revision: s.revision + 1,
+        })),
     }),
     {
       name: "reptr-active-workout",
-      storage: createJSONStorage(() => idbStorage),
-      partialize: ({ workout, revision, syncedRevision, rest, serverVersion }) => ({
+      storage: createJSONStorage(() => accountStorage),
+      // Loaded once the signed-in account is known (see device/scope.ts).
+      skipHydration: true,
+      partialize: ({
         workout,
         revision,
         syncedRevision,
         rest,
         serverVersion,
-      }),
-      onRehydrateStorage: () => () => useWorkoutStore.setState({ hydrated: true }),
+        conflict,
+        takeOver,
+      }) => ({ workout, revision, syncedRevision, rest, serverVersion, conflict, takeOver }),
+      onRehydrateStorage: () => (state) =>
+        useWorkoutStore.setState({
+          hydrated: true,
+          ...(state?.conflict ? { sync: "conflict" as const } : {}),
+        }),
     },
   ),
 );
+
+registerAccountStore(useWorkoutStore, () =>
+  useWorkoutStore.setState({ ...empty, hydrated: false }),
+);
+
+/** True while this device holds changes the server hasn't confirmed. */
+export function hasUnsyncedWorkout() {
+  const s = useWorkoutStore.getState();
+  return Boolean(s.workout && (s.revision > s.syncedRevision || s.conflict));
+}
 
 /** A random id this device keeps, so the server can tell two devices' saves apart. */
 export function deviceId() {
