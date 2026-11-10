@@ -9,7 +9,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { db } from "@/db";
 import { getTimeZone, requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
-import { isModerator, openReports } from "@/modules/community/moderation";
+import {
+  activityFlags,
+  isModerator,
+  openReports,
+  sanctionedAccounts,
+  type ActivityFlag,
+} from "@/modules/community/moderation";
+import { AccountActions } from "./account-actions";
 import { Decide } from "./decide";
 
 export const metadata: Metadata = { title: "Reports", robots: { index: false } };
@@ -46,7 +53,7 @@ async function Queue() {
     return <EmptyState icon={ShieldCheck} title="All clear" body="No open reports." />;
   }
   return (
-    <ul className="flex flex-col gap-3">
+    <ul aria-label="Open reports" className="flex flex-col gap-3">
       {items.map((r) => (
         <li key={r.id}>
           <Card className="flex flex-col gap-3">
@@ -85,13 +92,125 @@ async function Queue() {
   );
 }
 
+const flagText: Record<ActivityFlag["kind"], (v: number) => string> = {
+  many_workouts: (v) => `${v} counted workouts in the last 7 days`,
+  volume_spike: (v) =>
+    `${v.toLocaleString("en")} kg in the last 7 days, over 3 times their usual week`,
+  strength_jump: (v) => `Best lift up ${v}% on their previous best, in the last 14 days`,
+};
+
+/** Training that jumps far beyond the person's own history. A prompt to look, not a verdict. */
+async function Flags() {
+  const user = await requireUser();
+  if (!isModerator(user.id)) return null;
+  const flags = await activityFlags(db, user.id);
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="font-semibold">Unusual activity</h2>
+      <p className="text-muted-foreground text-sm">
+        Counted training that is far beyond the person&apos;s own history, from people on
+        leaderboards or in challenges. Look before acting: a real breakthrough looks the same.
+      </p>
+      {flags.length === 0 ? (
+        <p className="text-sm">Nothing unusual in the last two weeks.</p>
+      ) : (
+        <ul aria-label="Unusual activity" className="flex flex-col gap-2">
+          {flags.map((f) => (
+            <li key={`${f.userId}-${f.kind}`}>
+              <Card className="flex flex-col gap-2 text-sm">
+                <p>
+                  <Link href={`/u/${f.handle}`} className="text-accent font-semibold">
+                    @{f.handle}
+                  </Link>{" "}
+                  · {flagText[f.kind](f.value)}
+                  {f.excluded && " · already off boards"}
+                </p>
+                {!f.excluded && (
+                  <AccountActions
+                    userId={f.userId}
+                    handle={f.handle}
+                    actions={[["exclude_leaderboards", "Keep off boards"]]}
+                  />
+                )}
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Everyone currently suspended or kept off boards, so a decision can be lifted. */
+async function Sanctions() {
+  const user = await requireUser();
+  if (!isModerator(user.id)) return null;
+  const [rows, tz] = await Promise.all([sanctionedAccounts(db, user.id), getTimeZone()]);
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="font-semibold">Suspended or off boards</h2>
+      {rows.length === 0 ? (
+        <p className="text-sm">Nobody.</p>
+      ) : (
+        <ul aria-label="Sanctions" className="flex flex-col gap-2">
+          {rows.map((r) => (
+            <li key={r.userId}>
+              <Card className="flex flex-col gap-2 text-sm">
+                <p>
+                  {r.handle ? (
+                    <Link href={`/u/${r.handle}`} className="text-accent font-semibold">
+                      @{r.handle}
+                    </Link>
+                  ) : (
+                    "Account without a profile"
+                  )}{" "}
+                  ·{" "}
+                  {[r.suspended && "suspended", r.excluded && "off boards"]
+                    .filter(Boolean)
+                    .join(", ")}{" "}
+                  · {formatDate(r.updatedAt, tz)}
+                  {r.reason && ` · “${r.reason}”`}
+                </p>
+                <AccountActions
+                  userId={r.userId}
+                  handle={r.handle}
+                  actions={[
+                    ...(r.suspended ? ([["unsuspend", "Lift suspension"]] as const) : []),
+                    ...(r.excluded
+                      ? ([["include_leaderboards", "Put back on boards"]] as const)
+                      : []),
+                  ]}
+                />
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function ReportsPage() {
+  const loading = <p className="text-muted-foreground text-sm">Loading…</p>;
   return (
     <>
       <PageHeader title="Reports" subtitle="Moderation queue, oldest first" />
-      <Suspense fallback={<p className="text-muted-foreground text-sm">Loading…</p>}>
-        <Queue />
-      </Suspense>
+      <div className="flex flex-col gap-8">
+        <Suspense fallback={loading}>
+          <Queue />
+        </Suspense>
+        <Suspense fallback={loading}>
+          <Flags />
+        </Suspense>
+        <Suspense fallback={loading}>
+          <Sanctions />
+        </Suspense>
+        <p className="text-sm">
+          <Link href="/admin/metrics" className="text-accent font-medium">
+            Beta metrics
+          </Link>
+        </p>
+      </div>
     </>
   );
 }

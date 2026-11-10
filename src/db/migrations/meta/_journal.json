@@ -225,6 +225,20 @@
       "when": 1794299085362,
       "tag": "0031_community_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794301027050,
+      "tag": "0032_beta_readiness",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794301036278,
+      "tag": "0033_progress_board",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@
 import { del, get, keys, set } from "idb-keyval";
 import { create } from "zustand";
 import type { StateStorage } from "zustand/middleware";
+import { canSeal, importKey, isSealed, seal, unseal } from "./seal";
 import { announceChange, isLeader, joinTabs, onOtherTabChange } from "./tabs";
 
 // Everything Reptr keeps on a device (the workout being logged, offline quick logs) is
@@ -15,6 +16,8 @@ const hasIdb = () => typeof indexedDB !== "undefined";
 export const ACCOUNT_STORES = ["reptr-active-workout", "reptr-outbox"] as const;
 
 let account: string | null = null;
+/** The account's device key, in memory only (see seal.ts). Null means stored in plain. */
+let sealKey: CryptoKey | null = null;
 /** While switching, the in-memory reset must not be written over anyone's saved data. */
 let switching = false;
 /** Writes made before the account was known; saved once it is. */
@@ -59,9 +62,15 @@ export const accountStorage: StateStorage = {
   getItem: async (name) => {
     const key = scopedKey(name);
     if (!hasIdb() || !key) return null;
-    const value = (await get<string>(key)) ?? (await adoptLegacy(name, key));
-    if (value == null || readable(name, value)) return value;
-    await setAside(name, key, value);
+    const raw = (await get<string>(key)) ?? (await adoptLegacy(name, key));
+    if (raw == null) return null;
+    const value = await openValue(raw);
+    if (value != null && readable(name, value)) {
+      // Saved before encryption existed: encrypt it now.
+      if (sealKey && !isSealed(raw)) await set(key, await seal(sealKey, value));
+      return value;
+    }
+    await setAside(name, key, raw);
     return null;
   },
   setItem: async (name, value) => {
@@ -89,7 +98,7 @@ async function write(name: string, value: string) {
   }
   if (!hasIdb()) return;
   try {
-    await set(key, value);
+    await set(key, sealKey ? await seal(sealKey, value) : value);
     announceChange(name);
     if (useStorageHealth.getState().writeError) useStorageHealth.setState({ writeError: null });
   } catch (err) {
@@ -113,6 +122,12 @@ async function adoptLegacy(name: string, key: string) {
   await set(key, legacy);
   await del(name);
   return legacy;
+}
+
+/** The saved text: decrypted when it was encrypted, null when this key can't open it. */
+async function openValue(raw: string) {
+  if (!isSealed(raw)) return raw;
+  return sealKey ? unseal(sealKey, raw) : null;
 }
 
 /** Checks a saved value has the shape its store expects. */
@@ -151,7 +166,12 @@ export async function unreadableData() {
   const mine = (await keys())
     .map(String)
     .filter((k) => k.startsWith(UNREADABLE_PREFIX) && k.endsWith(`:${account}`));
-  const entries = await Promise.all(mine.map(async (k) => [k, await get(k)] as const));
+  const entries = await Promise.all(
+    mine.map(async (k) => {
+      const raw = await get(k);
+      return [k, typeof raw === "string" ? ((await openValue(raw)) ?? raw) : raw] as const;
+    }),
+  );
   return { format: "reptr-unreadable-v1", account, entries: Object.fromEntries(entries) };
 }
 
@@ -180,9 +200,11 @@ onOtherTabChange((name) => {
 /**
  * Points the device stores at an account. A different account than before starts from
  * empty memory and loads its own data; any writes made before this are saved under it.
+ * With the account's device key, everything is stored encrypted.
  */
-export async function switchAccount(id: string) {
+export async function switchAccount(id: string, keyBase64?: string) {
   if (account === id) return;
+  const nextKey = keyBase64 && canSeal() ? await importKey(keyBase64) : null;
   const previous = account;
   if (previous) {
     switching = true;
@@ -193,6 +215,7 @@ export async function switchAccount(id: string) {
     }
   }
   account = id;
+  sealKey = nextKey;
   for (const [name, value] of early) await write(name, value);
   early.clear();
   await reloadAll();

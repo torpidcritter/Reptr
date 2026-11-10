@@ -18,6 +18,7 @@ import { myGroups } from "@/modules/community/groups";
 import { BOARD_SIZE, exerciseBoards, leaderboard } from "@/modules/community/leaderboards";
 import {
   categories,
+  defaultCategory,
   isBaseCategory,
   periodLabels,
   periods,
@@ -36,6 +37,7 @@ function scoreText(category: string, score: number, units: UnitSystem) {
   if (category === "minutes") return `${score.toLocaleString("en")} min`;
   if (category === "streak") return `${score} ${score === 1 ? "week" : "weeks"}`;
   if (category === "xp") return `${score.toLocaleString("en")} XP`;
+  if (category === "records") return `${score} ${score === 1 ? "PR" : "PRs"}`;
   return score.toLocaleString("en");
 }
 
@@ -67,7 +69,7 @@ async function Board({ params }: { params: Promise<Params> }) {
   const scope =
     p.scope === "group" && group ? "group" : p.scope === "global" ? "global" : "friends";
   const lift = lifts.find((l) => l.category === p.cat);
-  const category = isBaseCategory(p.cat) || lift ? p.cat : "workouts";
+  const category = isBaseCategory(p.cat) || lift ? p.cat : defaultCategory;
   const rows = await leaderboard(db, user.id, {
     category,
     period: p.period,
@@ -189,7 +191,7 @@ async function Board({ params }: { params: Promise<Params> }) {
 export default function LeaderboardsPage({ searchParams }: PageProps<"/leaderboards">) {
   const params = searchParams.then((s) => ({
     scope: typeof s.scope === "string" ? s.scope : "friends",
-    cat: typeof s.cat === "string" ? s.cat : "workouts",
+    cat: typeof s.cat === "string" ? s.cat : defaultCategory,
     period: (periods as readonly string[]).includes(String(s.period))
       ? (s.period as Period)
       : "week",

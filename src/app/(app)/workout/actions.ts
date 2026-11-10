@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/db";
 import { syncAwardsQuietly } from "@/modules/community/awards";
 import { z } from "zod";
@@ -25,6 +26,7 @@ import {
 } from "@/modules/workouts/workouts";
 import type { SyncFailure } from "@/modules/sync/errors";
 import { failure } from "@/modules/sync/server";
+import { countSync } from "@/modules/sync/stats";
 
 export type SaveResult =
   | { ok: true; version: number; merged?: WorkoutSnapshot; alreadyFinished?: boolean }
@@ -43,6 +45,12 @@ export async function saveWorkoutAction(
   snapshot: WorkoutSnapshot,
   sync?: SyncInfo,
 ): Promise<SaveResult> {
+  const result = await saveWorkout(snapshot, sync);
+  after(() => countSync(db, "workout", result.ok ? "ok" : result.kind));
+  return result;
+}
+
+async function saveWorkout(snapshot: WorkoutSnapshot, sync?: SyncInfo): Promise<SaveResult> {
   const user = await requireUser();
   const busy = await overLimit(user.id, "write");
   if (busy) return { ok: false, kind: "rate_limited", error: busy };

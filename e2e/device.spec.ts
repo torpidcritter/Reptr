@@ -42,6 +42,22 @@ test("another account on the same browser never sees this account's workout", as
   await logSet(page, 1, "30", "10");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 
+  // What the device stores is encrypted: the exercise name isn't readable in it.
+  const stored = await page.evaluate(
+    () =>
+      new Promise<string[]>((resolve, reject) => {
+        const open = indexedDB.open("keyval-store");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction("keyval").objectStore("keyval").getAll();
+          all.onsuccess = () => resolve(all.result.filter((v) => typeof v === "string"));
+        };
+      }),
+  );
+  const workoutCopy = stored.filter((v) => v.startsWith("enc1:"));
+  expect(workoutCopy.length).toBeGreaterThan(0);
+  expect(stored.some((v) => v.includes("Barbell Curl"))).toBe(false);
+
   // Someone else signs in on this browser.
   await context.addCookies([actAs(otherUserId)]);
   await page.goto("/workout");

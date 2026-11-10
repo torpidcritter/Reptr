@@ -7,8 +7,10 @@ import { OutboxSyncer } from "@/components/layout/outbox-syncer";
 import { TimezoneCookie } from "@/components/layout/timezone-cookie";
 import { ActiveWorkoutPill } from "@/components/workout/active-workout-pill";
 import { WorkoutSyncer } from "@/components/workout/workout-syncer";
+import { db } from "@/db";
 import { getProfile, requireUser } from "@/lib/auth";
 import { isDemoUser } from "@/lib/demo";
+import { deviceKey } from "@/modules/sync/device-key";
 
 /** Sends signed-in users who haven't set up their profile to onboarding. The proxy handles signed-out visitors. */
 async function OnboardingGate() {
@@ -21,7 +23,7 @@ async function OnboardingGate() {
 /** Points this device's stores at the signed-in account (see lib/device/scope.ts). */
 async function DeviceAccount() {
   const user = await requireUser();
-  return <AccountScope userId={user.id} />;
+  return <AccountScope userId={user.id} deviceKey={await deviceKey(db, user.id)} />;
 }
 
 /** Makes it obvious when the screens show the sample account rather than real training. */

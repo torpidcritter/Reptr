@@ -3,14 +3,18 @@
 // (migration 0029); docs/social/LEADERBOARDS.md documents both halves.
 
 export const categories = {
+  // Consistency first, so the default board rewards turning up, not being strongest.
+  streak: { label: "Weekly streak", unit: "wk" },
   workouts: { label: "Workouts", unit: "" },
-  volume: { label: "Volume", unit: "kg" },
+  records: { label: "Personal records", unit: "PR" },
   sets: { label: "Working sets", unit: "" },
   minutes: { label: "Training time", unit: "min" },
   xp: { label: "XP", unit: "XP" },
-  streak: { label: "Weekly streak", unit: "wk" },
+  volume: { label: "Volume", unit: "kg" },
 } as const;
 export type BaseCategory = keyof typeof categories;
+/** The board shown first. */
+export const defaultCategory: BaseCategory = "streak";
 export const isBaseCategory = (c: string): c is BaseCategory => c in categories;
 
 /** Exercise boards: best estimated 1RM on a few lifts everyone does the same way. */

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/db";
 import { getTimeZone, requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
@@ -8,6 +9,7 @@ import { timed } from "@/lib/log";
 import { applyOp, opPaths, opSchema, pruneAppliedOps } from "@/modules/ops/outbox";
 import type { SyncFailure } from "@/modules/sync/errors";
 import { failure } from "@/modules/sync/server";
+import { countSync } from "@/modules/sync/stats";
 
 export type OpResult = { ok: true } | SyncFailure;
 
@@ -17,6 +19,12 @@ export type OpResult = { ok: true } | SyncFailure;
  * never applied to another, even on a shared device.
  */
 export async function applyOpAction(op: unknown, owner?: string): Promise<OpResult> {
+  const result = await applyOneOp(op, owner);
+  after(() => countSync(db, "outbox", result.ok ? "ok" : result.kind));
+  return result;
+}
+
+async function applyOneOp(op: unknown, owner?: string): Promise<OpResult> {
   const user = await requireUser();
   if (owner && owner !== user.id) {
     return { ok: false, kind: "forbidden", error: "This change was made under another account." };

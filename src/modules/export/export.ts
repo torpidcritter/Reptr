@@ -119,6 +119,8 @@ export const notExported: Record<string, string> = {
   applied_ops: "Sync bookkeeping: ids of offline changes already applied, no content.",
   rate_limits: "Request counters keyed by hashes, kept for minutes.",
   push_subscriptions: "Browser push addresses and keys: device secrets, not something you logged.",
+  device_keys:
+    "The key that encrypts Reptr's data on your devices: a secret, not something you logged.",
 };
 
 export type ExportSection = keyof typeof exportSections;

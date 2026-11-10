@@ -123,3 +123,50 @@ describe("unreadable device data", () => {
     expect(Object.values((await unreadableData())!.entries)).toEqual([bad]);
   });
 });
+
+describe("encrypted device data", () => {
+  const key = Buffer.alloc(32, 7).toString("base64");
+  const otherKey = Buffer.alloc(32, 9).toString("base64");
+
+  it("stores the workout encrypted and reads it back with the account's key", async () => {
+    const erin = randomUUID();
+    await switchAccount(erin, key);
+    const mine = emptyWorkout();
+    useWorkoutStore.getState().start({ ...mine, name: "Secret leg day" });
+    await flush();
+    const saved = await get<string>(scopedKey("reptr-active-workout", erin)!);
+    expect(saved).toMatch(/^enc1:/);
+    expect(saved).not.toContain("Secret leg day");
+
+    await switchAccount(randomUUID(), key);
+    expect(useWorkoutStore.getState().workout).toBeNull();
+    await switchAccount(erin, key);
+    expect(useWorkoutStore.getState().workout?.name).toBe("Secret leg day");
+  });
+
+  it("encrypts data saved before encryption existed", async () => {
+    const fay = randomUUID();
+    const plain = emptyWorkout();
+    await set(
+      scopedKey("reptr-active-workout", fay)!,
+      JSON.stringify({ state: { workout: plain, revision: 1, syncedRevision: 0 }, version: 0 }),
+    );
+    await switchAccount(fay, key);
+    expect(useWorkoutStore.getState().workout?.id).toBe(plain.id);
+    expect(await get<string>(scopedKey("reptr-active-workout", fay)!)).toMatch(/^enc1:/);
+  });
+
+  it("keeps data it can't decrypt aside instead of deleting it", async () => {
+    const gus = randomUUID();
+    await switchAccount(gus, otherKey);
+    useWorkoutStore.getState().start(emptyWorkout());
+    await flush();
+    const sealed = await get<string>(scopedKey("reptr-active-workout", gus)!);
+
+    await switchAccount(randomUUID(), key);
+    await set(scopedKey("reptr-active-workout", gus)!, sealed);
+    await switchAccount(gus, key);
+    expect(useWorkoutStore.getState().workout).toBeNull();
+    expect(Object.values((await unreadableData())!.entries)).toEqual([sealed]);
+  });
+});
