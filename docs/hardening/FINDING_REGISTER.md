@@ -73,8 +73,11 @@ config** = the repo part is finished; a dashboard setting is still required.
 ## Known limits
 
 - **Unsynced data on a shared device.** Changes not yet synced when someone signs out
-  stay in IndexedDB under their account, unencrypted, until they sign in again or the
-  account is deleted. Anyone with the device's browser profile could read them.
+  stay in IndexedDB under their account until they sign in again or the account is
+  deleted. Since Stage G they are encrypted (AES-GCM) with a per-account key that the
+  server holds (`device_keys`) and the device keeps in memory only while signed in, so
+  someone else using the same browser profile can't read them. The sign-out dialog tells
+  people on a shared device to let changes sync first.
 - **CSP allows inline scripts.** Next's prerendered pages carry inline bootstrap
   scripts without a per-request nonce. A nonce would force every page to render on
   each request. Other sources are locked to this origin and Supabase, which limits what

@@ -32,16 +32,21 @@ export default function RulesPage() {
         <Card>
           <h2 className="mb-2 font-semibold">The boards</h2>
           <ul className="flex list-disc flex-col gap-1 pl-5">
+            <li>
+              Weekly streak (shown first): weeks in a row with a counted workout, up to this week or
+              last week.
+            </li>
             <li>Workouts: how many counted workouts.</li>
-            <li>Volume: weight × reps over counted sets.</li>
+            <li>
+              Personal records: how many times you beat your own best, up to 5 per workout. It
+              measures progress against yourself, so a beginner can win it.
+            </li>
             <li>Working sets: how many counted sets.</li>
             <li>Training time: workout length, up to 4 hours each.</li>
             <li>
               XP: 50 per workout, plus 2 per set (up to 50) and 10 per personal record (up to 50).
             </li>
-            <li>
-              Weekly streak: weeks in a row with a counted workout, up to this week or last week.
-            </li>
+            <li>Volume: weight × reps over counted sets.</li>
             <li>Lift boards: best estimated one-rep max (Epley formula, sets of 1 to 12 reps).</li>
           </ul>
           <p className="mt-2">
@@ -54,8 +59,9 @@ export default function RulesPage() {
           <p>
             Only people who chose to be on leaderboards in their social profile. You only see people
             whose profile you can see: public accounts, and private accounts you follow. Blocked
-            people never appear. Reported numbers can be reviewed, and a moderator can take someone
-            off the boards.
+            people never appear. Reported numbers can be reviewed, training far beyond
+            someone&apos;s own history is shown to moderators to check, and a moderator can take
+            someone off the boards.
           </p>
         </Card>
         <Card>

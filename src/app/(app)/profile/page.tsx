@@ -95,7 +95,10 @@ async function ProfileBody() {
                 { href: "/notifications", label: "Notifications" },
                 { href: "/timeline", label: "Timeline" },
                 ...(isModerator(user.id)
-                  ? [{ href: "/admin/reports", label: "Reports to review" }]
+                  ? [
+                      { href: "/admin/reports", label: "Reports to review" },
+                      { href: "/admin/metrics", label: "Beta metrics" },
+                    ]
                   : []),
               ].map((l) => (
                 <Link

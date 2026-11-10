@@ -1,4 +1,5 @@
 import {
+  date,
   index,
   integer,
   jsonb,
@@ -61,3 +62,30 @@ export const appliedOps = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.opId] }), ownerPolicy("applied_ops", t.userId)],
 );
+
+/**
+ * One random key per account that encrypts what the account keeps on a device (the
+ * workout being logged, offline changes). The device holds it in memory only while the
+ * account is signed in, so data left on a shared browser after sign-out can't be read
+ * without signing in again. Only the server reads it: RLS is on with no policies.
+ */
+export const deviceKeys = pgTable("device_keys", {
+  userId: userId().primaryKey(),
+  key: text("key").notNull(),
+  createdAt: createdAt(),
+}).enableRLS();
+
+/**
+ * Daily counts of sync attempts by outcome (ok, conflict, validation, server error…),
+ * for the beta metrics page. No user ids: only how often syncing works.
+ */
+export const syncStats = pgTable(
+  "sync_stats",
+  {
+    day: date("day").notNull(),
+    channel: text("channel").notNull(),
+    outcome: text("outcome").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.channel, t.outcome] })],
+).enableRLS();

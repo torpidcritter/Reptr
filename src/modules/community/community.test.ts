@@ -36,7 +36,7 @@ import {
   updateGroup,
 } from "./groups";
 import { exerciseBoards, leaderboard } from "./leaderboards";
-import { decide, openReports } from "./moderation";
+import { activityFlags, decide, openReports, sanctionedAccounts } from "./moderation";
 import {
   listNotifications,
   markAllRead,
@@ -163,6 +163,21 @@ describe.skipIf(!testDatabaseUrl)("community: leaderboards, challenges, groups, 
       ["ana", 1, 1],
       ["ben", 1, 1],
     ]);
+  });
+
+  it("has a personal records board, capped at 5 records a workout", async () => {
+    const [{ n }] = await t.sql`
+      select count(*)::int as n from personal_records pr
+      join workout_sets ws on ws.id = pr.set_id
+      join workout_exercises we on we.id = ws.workout_exercise_id
+      join workouts w on w.id = we.workout_id
+      where w.user_id = ${dee} and w.status = 'completed'
+        and w.finished_at - w.started_at > interval '5 minutes' and w.created_at <= w.finished_at + interval '7 days'
+        and coalesce(ws.weight_kg, 0) <= 500`;
+    const rows = await board(dee, "records", "global");
+    expect(rows.find((r) => r[0] === "dee")?.[2] ?? 0).toBe(Math.min(n, 5));
+    for (const [, , score] of rows) expect(score).toBeLessThanOrEqual(10);
+    expect(rows.map((r) => r[0])).toContain("ana");
   });
 
   it("refuses unknown boards and raw scoring calls from signed-in people", async () => {
@@ -340,5 +355,42 @@ describe.skipIf(!testDatabaseUrl)("community: leaderboards, challenges, groups, 
     expect((await openReports(t.db, mod)).map((r) => r.id)).not.toContain(second);
     const [{ n }] = await t.sql`select count(*)::int as n from moderation_log`;
     expect(n).toBe(2);
+
+    // The sanctions list lifts decisions without needing another report.
+    expect(await sanctionedAccounts(t.db, mod)).toMatchObject([
+      { handle: "dee", suspended: true, excluded: true },
+    ]);
+    await expect(sanctionedAccounts(t.db, ana)).rejects.toThrow(/moderators/);
+    await expect(decide(t.db, mod, { userId: dee, action: "remove_post" })).rejects.toThrow();
+    await expect(decide(t.db, ana, { userId: dee, action: "unsuspend" })).rejects.toThrow();
+    await decide(t.db, mod, { userId: dee, action: "unsuspend" });
+    await decide(t.db, mod, { userId: dee, action: "include_leaderboards" });
+    expect(await sanctionedAccounts(t.db, mod)).toEqual([]);
+    expect((await searchPeople(t.db, ana, "dee")).map((c) => c.handle)).toEqual(["dee"]);
+    const [{ m }] =
+      await t.sql`select count(*)::int as m from moderation_log where report_id is null`;
+    expect(m).toBe(2);
+  });
+
+  it("flags training that jumps far beyond someone's own history, for moderators only", async () => {
+    const eve = randomUUID();
+    await t.addUser(eve);
+    await saveProfile(t.db, eve, { handle: "eve", visibility: "public" });
+    await t.sql`update social_profiles set leaderboards = true where user_id = ${eve}`;
+    // Five weeks of steady 60 kg bench, then 120 kg this week, and lots of volume.
+    for (let week = 2; week <= 6; week++) {
+      await workout(eve, { kg: 60, at: new Date(Date.now() - week * 7 * 24 * hour) });
+    }
+    // Saved when they were done, as they would have been.
+    await t.sql`update workouts set created_at = finished_at where user_id = ${eve}`;
+    for (let i = 0; i < 3; i++) {
+      await workout(eve, { kg: 120, sets: 20, at: new Date(Date.now() - (i + 1) * 5 * hour) });
+    }
+    await expect(activityFlags(t.db, ana)).rejects.toThrow(/moderators/);
+    const flags = (await activityFlags(t.db, mod)).filter((f) => f.handle === "eve");
+    expect(flags.map((f) => f.kind).sort()).toEqual(["strength_jump", "volume_spike"]);
+    expect(flags.find((f) => f.kind === "strength_jump")?.value).toBe(100);
+    // Steady training is never flagged.
+    expect((await activityFlags(t.db, mod)).map((f) => f.handle)).not.toContain("ana");
   });
 });

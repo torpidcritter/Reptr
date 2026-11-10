@@ -103,10 +103,27 @@ test("groups, a group challenge, leaderboards, notifications and moderation", as
       .click();
     await expect(moderator.getByText("All clear")).toBeVisible();
 
-    // Nobody else can open the queue.
+    // The sanctions list lifts it again without another report.
+    const sanctions = moderator.getByRole("list", { name: "Sanctions" });
+    await expect(sanctions.getByText("off boards")).toBeVisible();
+    await sanctions.getByRole("button", { name: "Put back on boards" }).click();
+    await moderator
+      .getByRole("dialog", { name: "Put back on boards for @lee_l?" })
+      .getByRole("button", { name: "Put back on boards" })
+      .click();
+    await expect(moderator.getByText("Nobody.")).toBeVisible();
+
+    // Beta metrics: counts for the moderator.
+    await moderator.getByRole("link", { name: "Beta metrics" }).click();
+    await expect(moderator.getByRole("heading", { name: "Coming back" })).toBeVisible();
+    await expect(moderator.getByText("Trained in the last 7 days")).toBeVisible();
+
+    // Nobody else can open the queue or the metrics.
     const res = await lee.page.goto("/admin/reports");
     await expect(lee.page.getByText("This page could not be found.")).toBeVisible();
     expect(res).not.toBeNull();
+    await lee.page.goto("/admin/metrics");
+    await expect(lee.page.getByText("This page could not be found.")).toBeVisible();
   } finally {
     await kim.context.close();
     await lee.context.close();

@@ -44,6 +44,9 @@ const sentinels: Record<string, string> = {
   "0029_community_functions":
     "select exists (select 1 from pg_proc where proname = 'leaderboard') as ok",
   "0030_community_tables": "select to_regclass('public.notifications') is not null as ok",
+  "0032_beta_readiness": "select to_regclass('public.device_keys') is not null as ok",
+  "0033_progress_board":
+    "select pg_get_functiondef('public.fitness_scores(text,timestamptz,timestamptz,uuid[])'::regprocedure) like '%records%' as ok",
   "0031_community_rules":
     "select exists (select 1 from pg_trigger where tgname = 'groups_add_owner') as ok",
 };

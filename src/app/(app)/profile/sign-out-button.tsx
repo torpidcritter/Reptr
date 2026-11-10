@@ -26,7 +26,7 @@ export function SignOutButton({ signOut }: { signOut: () => Promise<unknown> }) 
       ].filter(Boolean);
       const ok = await ask({
         title: "Some changes haven't synced",
-        body: `This device still has ${parts.join(" and ")}. They'll stay on this device, readable only by your account, and sync the next time you sign in here. If you sign in somewhere else instead, they won't be there.`,
+        body: `This device still has ${parts.join(" and ")}. They'll stay on this device, encrypted so only your account can open them, and sync the next time you sign in here. If you sign in somewhere else instead, they won't be there. On a shared device, go back and let them sync first.`,
         confirm: "Sign out anyway",
       });
       if (!ok) return;
