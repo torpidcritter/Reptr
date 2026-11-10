@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/lib/security-headers";
 
 // One id per build: versions the service worker's caches, and lets an open tab notice
 // it's running an older build than the server.
@@ -14,6 +15,10 @@ const nextConfig: NextConfig = {
   // Without this, Next blocks its dev scripts and no button on the page responds.
   allowedDevOrigins: ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.*.*.*", "*.local"],
   partialPrefetching: true,
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders() }];
+  },
   turbopack: {
     rules: {
       "*.css": {

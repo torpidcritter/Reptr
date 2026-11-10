@@ -133,7 +133,7 @@ describe.skipIf(!url)("database schema and row-level security", () => {
       asUser(
         alice,
         (tx) =>
-          tx`insert into body_metrics (user_id, type, value) values (${alice}, 'body_fat', 90)`,
+          tx`insert into body_metrics (user_id, type, value, recorded_on) values (${alice}, 'body_fat', 90, current_date)`,
       ),
     ).rejects.toThrow(/body_metrics_body_fat_range/);
   });
@@ -149,6 +149,76 @@ describe.skipIf(!url)("database schema and row-level security", () => {
         select 1 from exercise_muscles m where m.exercise_id = e.id and m.role = 'primary')
         and e.category in ('resistance', 'bodyweight')`;
     expect(n).toBe(0);
+  });
+
+  it("never lets anyone use another person's private exercise, even the server", async () => {
+    const [mine] = await sql`
+      insert into exercises (owner_id, name, category) values (${alice}, 'Alice private press', 'resistance')
+      returning id`;
+    const [w] = await sql`
+      insert into workouts (user_id, name, status, finished_at) values (${bob}, 'Bob', 'completed', now())
+      returning id`;
+    await expect(
+      sql`insert into workout_exercises (user_id, workout_id, exercise_id, position)
+          values (${bob}, ${w.id}, ${mine.id}, 0)`,
+    ).rejects.toThrow(/not available to this user/);
+    await expect(
+      sql`insert into goals (user_id, kind, exercise_id, target_value) values (${bob}, 'strength', ${mine.id}, 100)`,
+    ).rejects.toThrow(/not available to this user/);
+    await sql`delete from workouts where id = ${w.id}`;
+  });
+
+  it("only links a workout to its owner's routine, and keeps the workout when the routine goes", async () => {
+    const [r] =
+      await sql`insert into routines (user_id, name) values (${alice}, 'Alice plan') returning id`;
+    await expect(
+      sql`insert into workouts (user_id, routine_id, name, status, finished_at)
+          values (${bob}, ${r.id}, 'Bob', 'completed', now())`,
+    ).rejects.toThrow(/workouts_routine_fk/);
+    const [w] = await sql`
+      insert into workouts (user_id, routine_id, name, status, finished_at)
+      values (${alice}, ${r.id}, 'From plan', 'completed', now()) returning id`;
+    await sql`delete from routines where id = ${r.id}`;
+    const [after] = await sql`select routine_id, user_id from workouts where id = ${w.id}`;
+    expect(after).toEqual({ routine_id: null, user_id: alice });
+  });
+
+  it("counts photos toward each person's limit, only in their own folder", async () => {
+    // Supabase Storage isn't installed here; a minimal stand-in has the columns used.
+    await sql.unsafe(`
+      create schema if not exists storage;
+      create table if not exists storage.objects (bucket_id text, name text);
+      create or replace function storage.foldername(name text) returns text[]
+        language sql immutable as $$ select string_to_array(name, '/') $$;`);
+    await sql`insert into storage.objects values
+      ('progress-photos', ${alice + "/a.jpg"}), ('progress-photos', ${alice + "/b.jpg"}),
+      ('progress-photos', ${bob + "/c.jpg"}), ('other-bucket', ${alice + "/d.jpg"})`;
+    const left = async (id: string) =>
+      (await sql`select public.photo_quota_left(${id}) as n`)[0].n as number;
+    expect(await left(alice)).toBe(298);
+    expect(await left(bob)).toBe(299);
+    await sql.unsafe("drop schema storage cascade");
+  });
+
+  it("indexes every foreign key, so deletes never scan a whole table", async () => {
+    // A foreign key is covered when some index starts with its column, or for a
+    // composite key, with one of its columns other than user_id (which alone narrows
+    // the rows to check).
+    const rows = await sql`
+      select c.conrelid::regclass::text as tbl, c.conname as name
+      from pg_constraint c
+      where c.contype = 'f' and c.connamespace = 'public'::regnamespace
+        and not exists (
+          select 1 from pg_index i
+          join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+          where i.indrelid = c.conrelid and i.indkey[0] = any (c.conkey)
+            and (cardinality(c.conkey) = 1 or a.attname <> 'user_id')
+        )
+      order by 1, 2`;
+    // Equipment is fixed reference data that's never deleted.
+    expect(rows.map((r) => `${r.tbl}.${r.name}`)).toEqual([
+      "exercises.exercises_equipment_id_equipment_id_fk",
+    ]);
   });
 
   it("deletes a user's data when their account is deleted", async () => {

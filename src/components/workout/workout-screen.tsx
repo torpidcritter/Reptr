@@ -24,6 +24,7 @@ import type { PreviousPerformance } from "@/modules/workouts/workouts";
 import { ExerciseCard } from "./exercise-card";
 import { RestTimer } from "./rest-timer";
 import { formatClock, useNow } from "./use-now";
+import { useWakeLock } from "./use-wake-lock";
 import { useConfirm } from "@/components/ui/confirm";
 
 type RoutineOption = { id: string; name: string; exerciseCount: number };
@@ -201,6 +202,7 @@ function Logger({ settings }: { settings: Settings }) {
   const workout = useWorkoutStore((s) => s.workout)!;
   const { edit } = useWorkoutStore.getState();
   const now = useNow();
+  useWakeLock(workout.status === "active");
   const [previous, setPrevious] = useState<PreviousPerformance>({});
   const [picker, setPicker] = useState<{ mode: "add" } | { mode: "swap"; index: number } | null>(
     null,

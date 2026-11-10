@@ -40,5 +40,9 @@ export const metricLabels: Record<MetricType, string> = {
 /** Tape measurements, i.e. everything stored in cm. */
 export const tapeTypes = metricTypes.filter((t) => t !== "weight" && t !== "body_fat");
 
+/** Most progress photos one person can keep. Matches photo_quota_left() in migration 0024. */
+export const PHOTO_LIMIT = 300;
+export const photoLimitMessage = `You have ${PHOTO_LIMIT} progress photos, the most Reptr keeps. Delete some to add more.`;
+
 /** Private Supabase Storage bucket for progress photos, one folder per user. */
 export const photoBucket = "progress-photos";

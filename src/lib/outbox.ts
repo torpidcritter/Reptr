@@ -94,7 +94,8 @@ export const useOutbox = create<State>()(
           if (!f) return {};
           return {
             failed: s.failed.filter((x) => x.op.id !== id),
-            ops: [...s.ops, { ...f.op, attempts: 0, notBefore: undefined }],
+            // The person chose to send it, so it counts as queued now.
+            ops: [...s.ops, { ...f.op, attempts: 0, notBefore: undefined, queuedAt: Date.now() }],
           };
         }),
       removeFailed: (id) => set((s) => ({ failed: s.failed.filter((x) => x.op.id !== id) })),

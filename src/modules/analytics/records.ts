@@ -144,7 +144,7 @@ export async function recordPersonalRecords(
   for (const e of exercises) {
     // For assisted work the weight is help, not load, so only the reps can be a record.
     const sets =
-      (measured.get(e.exerciseId) ?? e.measurement) === "assisted_reps"
+      measured.get(e.exerciseId) === "assisted_reps"
         ? e.sets.map((s) => ({ ...s, weightKg: null }))
         : e.sets;
     byExercise.set(e.exerciseId, [...(byExercise.get(e.exerciseId) ?? []), ...sets]);

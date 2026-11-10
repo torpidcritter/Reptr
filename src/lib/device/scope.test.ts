@@ -74,8 +74,11 @@ describe("offline queue per account", async () => {
     await mutateOutbox((s) => s.fail(op.id, "validation", "Too much water"));
     expect(useOutbox.getState().ops).toHaveLength(0);
     expect(useOutbox.getState().failed[0]).toMatchObject({ kind: "validation" });
+    const before = Date.now();
     await mutateOutbox((s) => s.retryFailed(op.id));
     expect(useOutbox.getState().ops.map((o) => o.id)).toEqual([op.id]);
+    // Sending it again was the person's choice, so its age starts over.
+    expect(useOutbox.getState().ops[0].queuedAt).toBeGreaterThanOrEqual(before);
   });
 
   it("backs off a change after a brief failure instead of hammering the server", async () => {

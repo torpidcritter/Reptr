@@ -29,8 +29,8 @@ export default async function globalSetup() {
             (select 1 from profiles where user_id = ${otherUserId})`;
   await sql`insert into workouts (user_id, name, status, started_at, finished_at)
             values (${otherUserId}, 'Robin private session', 'completed', now() - interval '1 day', now() - interval '23 hours')`;
-  await sql`insert into body_metrics (user_id, type, value, recorded_at)
-            values (${otherUserId}, 'weight', 111.1, now() - interval '1 day')`;
+  await sql`insert into body_metrics (user_id, type, value, recorded_at, recorded_on)
+            values (${otherUserId}, 'weight', 111.1, now() - interval '1 day', current_date - 1)`;
   await sql.end();
 }
 

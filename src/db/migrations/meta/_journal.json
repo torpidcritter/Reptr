@@ -155,6 +155,34 @@
       "when": 1794293860350,
       "tag": "0021_coach_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794295754693,
+      "tag": "0022_body_metric_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794295882689,
+      "tag": "0023_ownership_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794295954700,
+      "tag": "0024_photo_quota",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794296072194,
+      "tag": "0025_exercise_fk_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { audit } from "@/modules/ops/audit";
 import { overLimit } from "@/lib/guard";
-import { requireUser } from "@/lib/auth";
+import { getTimeZone, requireUser } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { removeFiles, removeOrphanedFiles } from "@/lib/supabase/storage";
 import {
@@ -20,6 +20,8 @@ import {
   updateWeight,
   weightSchema,
   photoBucket,
+  PHOTO_LIMIT,
+  photoLimitMessage,
   photoSchema,
 } from "@/modules/body/body";
 
@@ -29,7 +31,7 @@ export async function logEntryAction(payload: unknown): Promise<{ error?: string
   if (busy) return { error: busy };
   const parsed = entrySchema.safeParse(payload);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  await logEntry(db, user.id, parsed.data);
+  await logEntry(db, user.id, parsed.data, await getTimeZone());
   revalidatePath("/physique");
   revalidatePath("/");
   return {};
@@ -50,10 +52,10 @@ export async function saveWeightAction(payload: unknown, id?: string): Promise<{
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   if (id) {
     if (!z.uuid().safeParse(id).success) return { error: "That weigh-in wasn't found." };
-    const ok = await updateWeight(db, user.id, id, parsed.data);
+    const ok = await updateWeight(db, user.id, id, parsed.data, await getTimeZone());
     if (!ok) return { error: "That weigh-in wasn't found." };
   } else {
-    await logWeight(db, user.id, parsed.data);
+    await logWeight(db, user.id, parsed.data, await getTimeZone());
   }
   weightChanged();
   return {};
@@ -72,6 +74,7 @@ export async function addPhotoAction(payload: unknown): Promise<{ error?: string
   if (busy) return { error: busy };
   const parsed = photoSchema.safeParse(payload);
   if (!parsed.success) return { error: "That photo couldn't be saved." };
+  if ((await listPhotos(db, user.id)).length >= PHOTO_LIMIT) return { error: photoLimitMessage };
   await addPhoto(db, user.id, parsed.data);
   await audit(db, user.id, "photo_added");
   await tidyPhotos(user.id);

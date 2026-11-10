@@ -1,5 +1,12 @@
 import type { Instrumentation } from "next";
 
+/** Runs once per server start: a deployment with local-only settings refuses to start. */
+export async function register() {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { assertSafeEnvironment } = await import("@/lib/env-check");
+  assertSafeEnvironment();
+}
+
 /** Logs every unhandled server error (pages, route handlers, server actions) as one JSON line. */
 export const onRequestError: Instrumentation.onRequestError = async (err, request, context) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

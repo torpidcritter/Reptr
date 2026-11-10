@@ -9,7 +9,10 @@ import {
   listPhotos,
   logEntry,
   measurementSummary,
+  logWeight,
   metricSeries,
+  weightHistory,
+  weightSchema,
 } from "./body";
 
 describe("entrySchema", () => {
@@ -58,6 +61,19 @@ describe.skipIf(!testDatabaseUrl)("body metrics", () => {
     expect(await metricSeries(t.db, alice, "weight")).toHaveLength(2);
     await deleteMetric(t.db, alice, series[0].id);
     expect(await metricSeries(t.db, alice, "weight")).toHaveLength(1);
+  });
+
+  it("keeps a weigh-in on the person's own day and time, at the real instant", async () => {
+    const carol = randomUUID();
+    await t.sql`insert into auth.users (id, email) values (${carol}, 'carol@test')`;
+    // 00:30 in Kolkata on the 10th is still the 9th in UTC.
+    const w = weightSchema.parse({ weightKg: 70, day: "2026-11-10", time: "00:30" });
+    await logWeight(t.db, carol, w, "Asia/Kolkata");
+    const [h] = await weightHistory(t.db, carol);
+    expect(h).toMatchObject({ day: "2026-11-10", time: "00:30" });
+    const [s] = await metricSeries(t.db, carol, "weight");
+    expect(s.day).toBe("2026-11-10");
+    expect(s.recordedAt.toISOString()).toBe("2026-11-09T19:00:00.000Z");
   });
 
   it("keeps photos in the owner's folder", async () => {

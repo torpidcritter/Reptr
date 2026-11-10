@@ -3,6 +3,7 @@ import { z } from "zod";
 import { bodyMetrics, progressPhotos } from "@/db/schema";
 import type { Database } from "@/db/types";
 import { type MetricType, metricTypes } from "./metrics";
+import { zonedInstant } from "./zoned";
 
 export * from "./metrics";
 
@@ -22,24 +23,29 @@ export const entrySchema = z
   );
 export type Entry = z.infer<typeof entrySchema>;
 
-/** Readings are stored at midday UTC on their day, so they never slip a day in any zone. */
-const atNoon = (d: string) => new Date(`${d}T12:00:00Z`);
+/**
+ * Each reading keeps the person's own day (and time, if they gave one), which is what
+ * charts and lists use, plus the real instant in their time zone for ordering. A reading
+ * with no time counts as midday.
+ */
+const when = (day: string, time: string | null, timeZone: string) => ({
+  recordedOn: day,
+  recordedTime: time,
+  recordedAt: zonedInstant(day, time ?? "12:00", timeZone),
+});
 
-export async function logEntry(db: Database, userId: string, e: Entry) {
+export async function logEntry(db: Database, userId: string, e: Entry, timeZone = "UTC") {
   const rows = Object.entries(e.values).map(([type, value]) => ({
     userId,
     type: type as MetricType,
     value: value!,
     method: type === "body_fat" ? e.bodyFatMethod : null,
-    recordedAt: atNoon(e.day),
+    ...when(e.day, null, timeZone),
   }));
   await db.insert(bodyMetrics).values(rows);
 }
 
-/**
- * One weigh-in. Times are the wall-clock time where the user was, stored as if UTC (like
- * the midday check-ins), so a reading never moves to another day in any time zone.
- */
+/** One weigh-in, at the day and wall-clock time where the person was. */
 export const weightSchema = z.object({
   weightKg: z
     .number({ error: "Enter your weight." })
@@ -54,16 +60,23 @@ export const weightSchema = z.object({
 });
 export type WeightInput = z.input<typeof weightSchema>;
 
-const wallClock = (w: z.infer<typeof weightSchema>) => new Date(`${w.day}T${w.time}:00Z`);
+// A weigh-in at exactly midday is shown without a time, as before.
+const weighInWhen = (w: z.infer<typeof weightSchema>, timeZone: string) =>
+  when(w.day, w.time === "12:00" ? null : w.time, timeZone);
 
-export async function logWeight(db: Database, userId: string, w: z.infer<typeof weightSchema>) {
+export async function logWeight(
+  db: Database,
+  userId: string,
+  w: z.infer<typeof weightSchema>,
+  timeZone = "UTC",
+) {
   const [row] = await db
     .insert(bodyMetrics)
     .values({
       userId,
       type: "weight",
       value: Math.round(w.weightKg * 100) / 100,
-      recordedAt: wallClock(w),
+      ...weighInWhen(w, timeZone),
       notes: w.note || null,
     })
     .returning({ id: bodyMetrics.id });
@@ -76,12 +89,13 @@ export async function updateWeight(
   userId: string,
   id: string,
   w: z.infer<typeof weightSchema>,
+  timeZone = "UTC",
 ) {
   const rows = await db
     .update(bodyMetrics)
     .set({
       value: Math.round(w.weightKg * 100) / 100,
-      recordedAt: wallClock(w),
+      ...weighInWhen(w, timeZone),
       notes: w.note || null,
     })
     .where(
@@ -97,24 +111,25 @@ export async function weightHistory(db: Database, userId: string, limit = 60) {
     .select({
       id: bodyMetrics.id,
       value: bodyMetrics.value,
-      recordedAt: bodyMetrics.recordedAt,
+      recordedOn: bodyMetrics.recordedOn,
+      recordedTime: bodyMetrics.recordedTime,
       notes: bodyMetrics.notes,
     })
     .from(bodyMetrics)
     .where(and(eq(bodyMetrics.userId, userId), eq(bodyMetrics.type, "weight")))
-    .orderBy(desc(bodyMetrics.recordedAt))
+    .orderBy(
+      desc(bodyMetrics.recordedOn),
+      desc(bodyMetrics.recordedTime),
+      desc(bodyMetrics.recordedAt),
+    )
     .limit(limit);
-  return rows.map((r) => {
-    const iso = r.recordedAt.toISOString();
-    return {
-      id: r.id,
-      weightKg: r.value,
-      day: iso.slice(0, 10),
-      // Readings logged without a time are stored at midday; show no time for those.
-      time: iso.slice(11, 19) === "12:00:00" ? null : iso.slice(11, 16),
-      note: r.notes ?? "",
-    };
-  });
+  return rows.map((r) => ({
+    id: r.id,
+    weightKg: r.value,
+    day: r.recordedOn,
+    time: r.recordedTime?.slice(0, 5) ?? null,
+    note: r.notes ?? "",
+  }));
 }
 export type WeighIn = Awaited<ReturnType<typeof weightHistory>>[number];
 
@@ -122,20 +137,29 @@ export async function deleteMetric(db: Database, userId: string, id: string) {
   await db.delete(bodyMetrics).where(and(eq(bodyMetrics.id, id), eq(bodyMetrics.userId, userId)));
 }
 
-/** All readings of one type since a date, oldest first. */
+/** All readings of one type since a date (by the person's own day), oldest first. */
 export async function metricSeries(db: Database, userId: string, type: MetricType, since?: Date) {
   const rows = await db
-    .select({ id: bodyMetrics.id, value: bodyMetrics.value, recordedAt: bodyMetrics.recordedAt })
+    .select({
+      id: bodyMetrics.id,
+      value: bodyMetrics.value,
+      recordedAt: bodyMetrics.recordedAt,
+      day: bodyMetrics.recordedOn,
+    })
     .from(bodyMetrics)
     .where(
       and(
         eq(bodyMetrics.userId, userId),
         eq(bodyMetrics.type, type),
-        since ? gte(bodyMetrics.recordedAt, since) : undefined,
+        since ? gte(bodyMetrics.recordedOn, since.toISOString().slice(0, 10)) : undefined,
       ),
     )
-    .orderBy(asc(bodyMetrics.recordedAt));
-  return rows.map((r) => ({ ...r, day: r.recordedAt.toISOString().slice(0, 10) }));
+    .orderBy(
+      asc(bodyMetrics.recordedOn),
+      asc(bodyMetrics.recordedTime),
+      asc(bodyMetrics.recordedAt),
+    );
+  return rows;
 }
 
 /** For each measurement type: the first and the latest reading. */

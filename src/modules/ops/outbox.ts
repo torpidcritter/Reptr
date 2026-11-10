@@ -5,6 +5,7 @@ import { appliedOps } from "@/db/schema";
 import { entrySchema, logEntry } from "@/modules/body/body";
 import { addFood, addWater, foodSchema } from "@/modules/nutrition/nutrition";
 import { checkinSchema, saveCheckin } from "@/modules/recovery/recovery";
+import { OP_RETENTION_DAYS } from "./retention";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -35,7 +36,7 @@ export const opPaths: Record<OpKind, string[]> = {
  * Applies a change once. The op id is recorded in the same transaction as the change,
  * so a repeat of an op that already went through is a no-op.
  */
-export async function applyOp(db: Database, userId: string, op: Op) {
+export async function applyOp(db: Database, userId: string, op: Op, timeZone = "UTC") {
   return db.transaction(async (tx) => {
     const fresh = await tx
       .insert(appliedOps)
@@ -48,19 +49,19 @@ export async function applyOp(db: Database, userId: string, op: Op) {
     if (op.kind === "food") await addFood(t, userId, op.payload);
     else if (op.kind === "water") await addWater(t, userId, op.payload.day, op.payload.ml);
     else if (op.kind === "checkin") await saveCheckin(t, userId, op.payload);
-    else await logEntry(t, userId, op.payload);
+    else await logEntry(t, userId, op.payload, timeZone);
     return { duplicate: false };
   });
 }
 
-/** Op ids only need keeping while a device might still retry. */
+/** Forgets op ids older than the retention window. */
 export async function pruneAppliedOps(db: Database, userId: string) {
   await db
     .delete(appliedOps)
     .where(
       and(
         sql`${appliedOps.userId} = ${userId}`,
-        lt(appliedOps.createdAt, sql`now() - interval '30 days'`),
+        lt(appliedOps.createdAt, sql`now() - make_interval(days => ${OP_RETENTION_DAYS})`),
       ),
     );
 }
