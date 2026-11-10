@@ -10,6 +10,7 @@ import { WorkoutSyncer } from "@/components/workout/workout-syncer";
 import { db } from "@/db";
 import { getProfile, requireUser } from "@/lib/auth";
 import { isDemoUser } from "@/lib/demo";
+import { log } from "@/lib/log";
 import { deviceKey } from "@/modules/sync/device-key";
 
 /** Sends signed-in users who haven't set up their profile to onboarding. The proxy handles signed-out visitors. */
@@ -23,7 +24,13 @@ async function OnboardingGate() {
 /** Points this device's stores at the signed-in account (see lib/device/scope.ts). */
 async function DeviceAccount() {
   const user = await requireUser();
-  return <AccountScope userId={user.id} deviceKey={await deviceKey(db, user.id)} />;
+  // A key that can't be fetched must never stop the app from loading: the device then
+  // keeps what it already has and doesn't touch anything stored encrypted.
+  const key = await deviceKey(db, user.id).catch((err: unknown) => {
+    log.error("device_key_failed", { err });
+    return undefined;
+  });
+  return <AccountScope userId={user.id} deviceKey={key} />;
 }
 
 /** Makes it obvious when the screens show the sample account rather than real training. */
