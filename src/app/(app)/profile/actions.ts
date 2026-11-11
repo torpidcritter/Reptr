@@ -2,32 +2,19 @@
 
 import { createHash } from "node:crypto";
 import { db } from "@/db";
-import { getUser, requireUser } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
 import { log } from "@/lib/log";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { IDENTITY_COOKIE } from "@/lib/identity-cookie";
 import { emptyFolder } from "@/lib/supabase/storage";
 import { photoBucket } from "@/modules/body/body";
 import { avatarBucket } from "@/modules/social/avatars";
 import { deleteAccount, deleteConfirmWord } from "@/modules/ops/account";
-import { audit } from "@/modules/ops/audit";
-
-/**
- * Ends the session. The device side (clearing this account's local data and cached
- * pages, then reloading) is done by the sign-out button before and after this.
- */
-export async function signOut() {
-  const user = await getUser();
-  if (user) await audit(db, user.id, "signed_out");
-  // Local use without Supabase has no session to end.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
-  const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
-}
 
 export type DeleteState = { error?: string; deleted?: boolean };
 
-/** Deletes the account and everything in it: rows, photos and the sign-in itself. */
+/** Deletes the profile and everything in it: rows, photos and this browser's cookie. */
 export async function deleteAccountAction(
   _prev: DeleteState,
   formData: FormData,
@@ -61,10 +48,7 @@ export async function deleteAccountAction(
   }
   // Logged without the id itself, so the log can't be tied back to the person.
   log.info("account_deleted", { ref, photos });
-  try {
-    const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut();
-  } catch {}
-  // The page then clears this account's data from the device and goes to /login.
+  (await cookies()).delete(IDENTITY_COOKIE);
+  // The page then clears this profile's data from the device and goes to create-profile.
   return { deleted: true };
 }

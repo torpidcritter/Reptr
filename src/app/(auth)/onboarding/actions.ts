@@ -27,8 +27,9 @@ export async function completeOnboarding(
   const parsed = onboardingSchema.safeParse(onboardingFromForm(formData));
   if (!parsed.success) return { errors: z.flattenError(parsed.error).fieldErrors };
 
-  const { weightKg, ...profile } = parsed.data;
-  await saveProfile(user.id, profile);
+  // The name was given when the profile was created; a blank one here doesn't clear it.
+  const { weightKg, displayName, ...rest } = parsed.data;
+  await saveProfile(user.id, displayName ? { ...rest, displayName } : rest);
   // The weight they gave becomes their first weigh-in, dated today where they are.
   if (weightKg) {
     const tz = await getTimeZone();

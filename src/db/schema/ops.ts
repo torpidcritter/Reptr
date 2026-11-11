@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   date,
   index,
   integer,
@@ -23,6 +25,28 @@ export const rateLimits = pgTable("rate_limits", {
   windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
   count: integer("count").notNull(),
 }).enableRLS();
+
+/**
+ * How a browser proves which profile it belongs to. There are no passwords or sign-in
+ * emails: creating a profile gives the browser a long random token in an httpOnly
+ * cookie ("device"), and a profile key the person can keep to open the profile on
+ * another device ("recovery"). Only a SHA-256 hash of each is stored, so a copy of this
+ * table can't be used to get in. Server only: RLS is on with no policies.
+ */
+export const identityTokens = pgTable(
+  "identity_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: userId(),
+    kind: text("kind", { enum: ["device", "recovery"] }).notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("identity_tokens_user_idx").on(t.userId),
+    check("identity_tokens_kind", sql`${t.kind} in ('device', 'recovery')`),
+  ],
+).enableRLS();
 
 /**
  * A record of sensitive things done on an account (sign-ins, exports, photo changes,

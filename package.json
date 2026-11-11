@@ -18,7 +18,8 @@
     "db:demo": "tsx src/db/seed/demo.ts",
     "e2e": "playwright test",
     "db:status": "tsx scripts/ops/migrations.ts status",
-    "db:migrate:to": "tsx scripts/ops/migrations.ts to"
+    "db:migrate:to": "tsx scripts/ops/migrations.ts to",
+    "ops:profile-key": "tsx scripts/ops/profile-key.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

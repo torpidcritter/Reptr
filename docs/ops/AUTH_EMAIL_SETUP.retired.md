@@ -1,3 +1,5 @@
+> **Retired (2026-11-11).** Reptr no longer has email sign-in; see `src/modules/profile/identity.ts`. Kept for history.
+
 # Sign-in email setup (P0-1, P1-11)
 
 Reptr signs people in with an email that holds both a link and a 6-digit code. This

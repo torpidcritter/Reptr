@@ -23,13 +23,14 @@ describe.skipIf(!testDatabaseUrl)("rate limits", () => {
   it("allows up to the limit, then blocks with a wait time", async () => {
     const who = randomUUID();
     const results = [];
-    for (let i = 0; i <= limits.login.max; i++) results.push(await hit(t.db, "login", who));
-    expect(results.slice(0, limits.login.max).every((r) => r.ok)).toBe(true);
+    for (let i = 0; i <= limits.profileCreate.max; i++)
+      results.push(await hit(t.db, "profileCreate", who));
+    expect(results.slice(0, limits.profileCreate.max).every((r) => r.ok)).toBe(true);
     const last = results.at(-1)!;
     expect(last.ok).toBe(false);
     if (!last.ok) expect(last.retryAfterSec).toBeGreaterThan(800);
     // Someone else, or another limit, isn't affected.
-    expect((await hit(t.db, "login", randomUUID())).ok).toBe(true);
+    expect((await hit(t.db, "profileCreate", randomUUID())).ok).toBe(true);
     expect((await hit(t.db, "export", who)).ok).toBe(true);
   });
 

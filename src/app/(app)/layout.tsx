@@ -10,14 +10,20 @@ import { WorkoutSyncer } from "@/components/workout/workout-syncer";
 import { db } from "@/db";
 import { getProfile, requireUser } from "@/lib/auth";
 import { isDemoUser } from "@/lib/demo";
+import { CREATE_PROFILE_PATH } from "@/lib/identity-cookie";
 import { log } from "@/lib/log";
 import { deviceKey } from "@/modules/sync/device-key";
 
-/** Sends signed-in users who haven't set up their profile to onboarding. The proxy handles signed-out visitors. */
+/**
+ * A profile without a username (made before profiles had one) finishes it first, then
+ * anyone not set up yet goes to onboarding. Browsers without a profile were already
+ * sent to create one by the proxy.
+ */
 async function OnboardingGate() {
   const user = await requireUser();
   const profile = await getProfile(user.id);
-  if (!profile?.onboardedAt) redirect("/onboarding");
+  if (!profile?.username) redirect(CREATE_PROFILE_PATH);
+  if (!profile.onboardedAt) redirect("/onboarding");
   return null;
 }
 

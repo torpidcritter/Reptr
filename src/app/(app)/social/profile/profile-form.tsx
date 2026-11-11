@@ -2,11 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
 import type { ProfileInput } from "@/modules/social/social";
 import { saveProfileAction, type ProfileFormState } from "../actions";
 
-/** Handle, bio and who can see you. */
+/** Who can see you. Your username, bio and picture come from your profile. */
 export function ProfileForm({ initial, isNew }: { initial: ProfileInput; isNew: boolean }) {
   const [state, save, saving] = useActionState<ProfileFormState, FormData>(saveProfileAction, {
     values: initial,
@@ -14,38 +13,8 @@ export function ProfileForm({ initial, isNew }: { initial: ProfileInput; isNew: 
   const v = state.values ?? initial;
   return (
     <form action={save} className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="handle" className="text-sm font-medium">
-          Handle
-        </label>
-        <div className="flex items-center gap-1">
-          <span className="text-muted-foreground" aria-hidden>
-            @
-          </span>
-          <Input
-            id="handle"
-            name="handle"
-            defaultValue={v.handle}
-            required
-            minLength={3}
-            maxLength={20}
-            pattern="[A-Za-z0-9_]{3,20}"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            aria-describedby="handle-help"
-          />
-        </div>
-        <p id="handle-help" className="text-muted-foreground text-xs">
-          3 to 20 letters, numbers or underscores. People find you by it.
-        </p>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="bio" className="text-sm font-medium">
-          Bio (optional)
-        </label>
-        <Textarea id="bio" name="bio" defaultValue={v.bio} maxLength={160} rows={2} />
-      </div>
+      {/* The handle is always the username; the database copies it from the profile. */}
+      <input type="hidden" name="handle" value={v.handle} />
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-1 text-sm font-medium">Who can see your workouts</legend>
         <label className="flex items-start gap-3 rounded-xl border p-3">
@@ -100,8 +69,8 @@ export function ProfileForm({ initial, isNew }: { initial: ProfileInput; isNew: 
         </span>
       </label>
       <p className="text-muted-foreground text-xs">
-        Your name comes from your account settings. Your birth date, height, body measurements,
-        photos and nutrition are never shown to anyone.
+        Your name, username, bio and picture come from your profile. Your birth date, height, body
+        measurements, photos and nutrition are never shown to anyone.
       </p>
       {state.error && (
         <p role="alert" className="text-danger text-sm">

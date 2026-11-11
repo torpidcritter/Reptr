@@ -27,7 +27,7 @@ The build plan and task list live in the Reptr build spec. Weights, distances an
    ```
 4. In Supabase, go to **Authentication > URL Configuration**. Set **Site URL** to your app's URL and add `http://localhost:3000/auth/confirm` (plus your deployed URL + `/auth/confirm`) to **Redirect URLs**.
 
-Sign-in uses email magic links. New sign-ups get a profile row automatically and are sent to onboarding.
+There is no sign-in. A visitor creates a profile (name, unique username, optional email, picture and bio) and their browser remembers it with an httpOnly cookie. A profile key, shown once, opens the same profile on another device. New profiles then go through onboarding.
 
 Migrations also create the private `progress-photos` storage bucket with per-user folder policies, so progress photos work as soon as the app points at the project.
 

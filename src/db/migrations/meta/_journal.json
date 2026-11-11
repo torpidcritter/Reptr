@@ -239,6 +239,13 @@
       "when": 1794301036278,
       "tag": "0033_progress_board",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794384007833,
+      "tag": "0034_profile_identity",
+      "breakpoints": true
     }
   ]
 }

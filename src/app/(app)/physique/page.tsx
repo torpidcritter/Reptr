@@ -193,7 +193,6 @@ async function Body() {
           <CardLabel>Progress photos</CardLabel>
           <div className="mt-3">
             <Photos
-              userId={user.id}
               enabled={storageEnabled()}
               photos={photos.map((p) => ({
                 id: p.id,

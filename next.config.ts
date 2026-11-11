@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.*.*.*", "*.local"],
   partialPrefetching: true,
   poweredByHeader: false,
+  // Sign-in is gone: old sign-in pages and email links go to the app, which sends anyone
+  // without a profile to create one.
+  async redirects() {
+    return [
+      { source: "/login", destination: "/", permanent: false },
+      { source: "/auth/:path*", destination: "/", permanent: false },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders() }];
   },

@@ -30,6 +30,8 @@ export async function saveSettings(
   const profile: Partial<typeof parsed.data> = { ...parsed.data };
   delete profile.weightKg;
   delete profile.dateOfBirth;
+  // The name is edited with the rest of the profile (identity-actions.ts).
+  delete profile.displayName;
   await db
     .update(schema.profiles)
     .set({

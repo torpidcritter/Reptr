@@ -6,9 +6,7 @@ import { db } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { overLimit } from "@/lib/guard";
 import { log } from "@/lib/log";
-import { removeFiles } from "@/lib/supabase/storage";
 import { audit } from "@/modules/ops/audit";
-import { avatarBucket } from "@/modules/social/avatars";
 import * as social from "@/modules/social/social";
 
 // Every action checks the session, counts against a rate limit, and lets the database's
@@ -60,29 +58,10 @@ export async function saveProfileAction(
   return { ...res, values };
 }
 
-export async function setAvatarAction(path: string | null): Promise<ActionResult> {
-  const user = await requireUser();
-  const busy = await overLimit(user.id, "photo");
-  if (busy) return { error: busy };
-  const before = await social.myProfile(db, user.id);
-  const res = await run(() => social.setAvatar(db, user.id, path), "avatar_failed");
-  if (res.ok && before?.avatarPath && before.avatarPath !== path) {
-    await removeFiles(avatarBucket, [before.avatarPath]).catch((err) =>
-      log.warn("avatar_cleanup_failed", { err }),
-    );
-  }
-  refresh("/social/profile");
-  return res;
-}
-
 export async function leaveSocialAction(): Promise<ActionResult> {
   const user = await requireUser();
-  const before = await social.myProfile(db, user.id);
   const res = await run(() => social.leaveSocial(db, user.id), "leave_social_failed");
-  if (res.ok) {
-    await audit(db, user.id, "social_profile_deleted");
-    if (before?.avatarPath) await removeFiles(avatarBucket, [before.avatarPath]).catch(() => {});
-  }
+  if (res.ok) await audit(db, user.id, "social_profile_deleted");
   refresh("/social/profile");
   return res;
 }

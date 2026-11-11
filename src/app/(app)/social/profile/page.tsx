@@ -3,11 +3,11 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardLabel } from "@/components/ui/card";
 import { db } from "@/db";
+import Link from "next/link";
+import { Avatar } from "@/components/social/avatar";
 import { avatarUrls } from "@/lib/avatar-urls";
 import { getProfile, requireUser } from "@/lib/auth";
-import { storageEnabled } from "@/lib/supabase/storage";
 import { blockedPeople, myProfile } from "@/modules/social/social";
-import { AvatarPicker } from "./avatar-picker";
 import { BlockedList } from "./blocked-list";
 import { LeaveSocial } from "./leave-social";
 import { ProfileForm } from "./profile-form";
@@ -21,26 +21,32 @@ async function Settings() {
     getProfile(user.id),
     blockedPeople(db, user.id),
   ]);
-  const urls = await avatarUrls([mine?.avatarPath]);
+  const urls = await avatarUrls([profile?.avatarPath]);
+  const username = profile?.username ?? mine?.handle ?? "";
   return (
     <div className="flex flex-col gap-4">
-      {mine && (
-        <Card>
-          <AvatarPicker
-            userId={user.id}
-            name={profile?.displayName ?? null}
-            handle={mine.handle}
-            url={urls.get(mine.avatarPath ?? "") ?? null}
-            enabled={storageEnabled()}
-          />
-        </Card>
-      )}
+      <Card className="flex items-center gap-4">
+        <Avatar
+          name={profile?.displayName ?? null}
+          handle={username}
+          url={urls.get(profile?.avatarPath ?? "") ?? null}
+          size="lg"
+        />
+        <div className="min-w-0">
+          <p className="font-semibold">{profile?.displayName}</p>
+          <p className="text-muted-foreground">@{username}</p>
+          {profile?.bio && <p className="mt-1 text-sm">{profile.bio}</p>}
+          <Link href="/profile#your-profile" className="text-accent mt-1 inline-block text-sm">
+            Edit name, username, bio or picture
+          </Link>
+        </div>
+      </Card>
       <Card>
         <ProfileForm
           isNew={!mine}
           initial={{
-            handle: mine?.handle ?? "",
-            bio: mine?.bio ?? "",
+            handle: username,
+            bio: profile?.bio ?? "",
             visibility: mine?.visibility ?? "private",
             discoverable: mine?.discoverable ?? true,
             leaderboards: mine?.leaderboards ?? true,

@@ -48,6 +48,16 @@ export default async function globalSetup() {
   await sql`insert into workout_sets (user_id, workout_exercise_id, set_number, weight_kg, reps, completed_at)
     values (${kimUserId}, ${we.id}, 1, 60, 8, now() - interval '30 minutes'),
            (${kimUserId}, ${we.id}, 2, 60, 8, now() - interval '25 minutes')`;
+  // Everyone has a profile with a username (made on "Let's create your profile.").
+  for (const [id, username] of [
+    [e2eUserId, "sam_lifts"],
+    [otherUserId, "robin_r"],
+    [kimUserId, "kim_k"],
+    [leeUserId, "lee_l"],
+    [freshUserId, "fresh_f"],
+  ]) {
+    await sql`update profiles set username = ${username} where user_id = ${id}`;
+  }
   await sql.end();
 }
 
