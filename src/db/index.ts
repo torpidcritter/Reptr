@@ -14,7 +14,11 @@ function createDb(): Db {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. See .env.example.");
   // Supabase's pooler (port 6543) runs in transaction mode, which doesn't support prepared statements.
-  return drizzle(postgres(url, { prepare: false, max: 5 }), { schema });
+  // Timeouts turn an unreachable or saturated database into an error page and a log line
+  // within seconds, instead of pages that sit on "Loading…" until the function is killed.
+  return drizzle(postgres(url, { prepare: false, max: 5, connect_timeout: 10, idle_timeout: 20 }), {
+    schema,
+  });
 }
 
 /** Created on first use, so builds and pages that don't touch the database don't need DATABASE_URL. */
