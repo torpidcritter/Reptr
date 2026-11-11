@@ -15,6 +15,10 @@ export function productionEnvProblems(env: Env): string[] {
   for (const name of ["REPTR_DEV_USER_ID", "REPTR_DEMO", "REPTR_LOCAL", "REPTR_E2E"]) {
     if (env[name]) problems.push(`${name} is set; it is for local use only. Remove it.`);
   }
+  if (env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY)
+    problems.push(
+      "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY is set, which would send the key to browsers. Rename it SUPABASE_SERVICE_ROLE_KEY.",
+    );
   // Previews may run without a database; production can't.
   const production = env.VERCEL_ENV === "production" || env.REPTR_DEPLOYED === "1";
   if (!production) return problems;
@@ -25,8 +29,6 @@ export function productionEnvProblems(env: Env): string[] {
   ]) {
     if (!env[name]) problems.push(`${name} is not set.`);
   }
-  if (!env.NEXT_PUBLIC_SITE_URL && !env.VERCEL_PROJECT_PRODUCTION_URL)
-    problems.push("NEXT_PUBLIC_SITE_URL is not set, so sign-in links have no address.");
   return problems;
 }
 

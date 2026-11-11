@@ -11,12 +11,12 @@ export const limits = {
   write: { max: 600, windowSec: 10 * 60 },
   photo: { max: 30, windowSec: 3600 },
   export: { max: 10, windowSec: 3600 },
-  /** Sign-in emails, keyed by address. */
-  login: { max: 5, windowSec: 15 * 60 },
-  /** Sign-in emails from one network address, so one client can't mail many people. */
-  loginIp: { max: 20, windowSec: 60 * 60 },
-  /** Guesses at the six-digit sign-in code, keyed by address. */
-  loginCode: { max: 8, windowSec: 15 * 60 },
+  /** New profiles from one network address, so nobody can mass-create accounts. */
+  profileCreate: { max: 10, windowSec: 60 * 60 },
+  /** Profile key attempts from one network address. */
+  profileOpen: { max: 10, windowSec: 15 * 60 },
+  /** "Is this username free?" checks from one network address. */
+  usernameCheck: { max: 120, windowSec: 10 * 60 },
   clientError: { max: 30, windowSec: 10 * 60 },
   accountDelete: { max: 3, windowSec: 3600 },
   /** Social: follows and requests, posts, likes, comments, reports. */

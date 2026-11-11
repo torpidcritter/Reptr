@@ -15,7 +15,6 @@ test("a new account goes through onboarding and starts empty", async ({ page, co
   await page.goto("/");
   await page.waitForURL(/\/onboarding$/);
 
-  await page.getByLabel("Your name").fill("Alex");
   await page.getByLabel("Height (cm)").fill("175");
   await page.getByLabel("Weight (kg)").fill("70.5");
   await page.getByRole("button", { name: "Continue" }).click();

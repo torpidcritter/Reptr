@@ -6,6 +6,11 @@ import { log } from "@/lib/log";
 export const auditLabels = {
   signed_in: "Signed in",
   signed_out: "Signed out",
+  profile_created: "Created your profile",
+  profile_opened: "Opened your profile on a device",
+  profile_updated: "Changed your profile",
+  profile_key_replaced: "Made a new profile key",
+  device_cleared: "Removed your profile from a device",
   data_exported: "Downloaded your data",
   photo_added: "Added a progress photo",
   photo_deleted: "Deleted a progress photo",

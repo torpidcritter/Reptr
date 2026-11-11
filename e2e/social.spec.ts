@@ -13,7 +13,8 @@ const actAs = (id: string) => ({
 
 async function setUpProfile(page: Page, handle: string, visibility: "Public" | "Private") {
   await page.goto("/social/profile");
-  await page.getByLabel("Handle").fill(handle);
+  // The handle is the username from the person's profile.
+  await expect(page.getByText(`@${handle}`)).toBeVisible();
   await page.getByText(visibility, { exact: true }).click();
   await page.getByRole("button", { name: "Create profile" }).click();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();

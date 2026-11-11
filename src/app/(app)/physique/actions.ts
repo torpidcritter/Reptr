@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db";
@@ -7,7 +8,12 @@ import { audit } from "@/modules/ops/audit";
 import { overLimit } from "@/lib/guard";
 import { getTimeZone, requireUser } from "@/lib/auth";
 import { log } from "@/lib/log";
-import { removeFiles, removeOrphanedFiles } from "@/lib/supabase/storage";
+import {
+  removeFiles,
+  removeOrphanedFiles,
+  signedUpload,
+  storageEnabled,
+} from "@/lib/supabase/storage";
 import {
   addPhoto,
   deleteMetric,
@@ -66,6 +72,26 @@ export async function deleteMetricAction(id: string) {
   if (!z.uuid().safeParse(id).success) return;
   await deleteMetric(db, user.id, id);
   weightChanged();
+}
+
+/**
+ * A one-time link to upload one progress photo into the person's own folder. The photo
+ * limit is checked here, since uploads no longer go through per-user storage policies.
+ */
+export async function photoUploadAction(): Promise<
+  { path: string; token: string } | { error: string }
+> {
+  const user = await requireUser();
+  if (!storageEnabled()) return { error: "Photos aren't available yet." };
+  const busy = await overLimit(user.id, "photo");
+  if (busy) return { error: busy };
+  if ((await listPhotos(db, user.id)).length >= PHOTO_LIMIT) return { error: photoLimitMessage };
+  try {
+    return await signedUpload(photoBucket, `${user.id}/${randomUUID()}.jpg`);
+  } catch (err) {
+    log.error("photo_upload_link_failed", { err });
+    return { error: "The photo couldn't be uploaded. Try again." };
+  }
 }
 
 export async function addPhotoAction(payload: unknown): Promise<{ error?: string }> {

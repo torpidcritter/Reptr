@@ -121,6 +121,8 @@ export const notExported: Record<string, string> = {
   push_subscriptions: "Browser push addresses and keys: device secrets, not something you logged.",
   device_keys:
     "The key that encrypts Reptr's data on your devices: a secret, not something you logged.",
+  identity_tokens:
+    "Hashes of the codes that let your devices open your profile: secrets, not something you logged.",
 };
 
 export type ExportSection = keyof typeof exportSections;

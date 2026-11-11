@@ -5,9 +5,9 @@ import { useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { shrinkImage } from "@/lib/images";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { uploadToLink } from "@/lib/upload";
 import { PHOTO_LIMIT, photoBucket, photoLimitMessage } from "@/modules/body/metrics";
-import { addPhotoAction, deletePhotoAction } from "./actions";
+import { addPhotoAction, deletePhotoAction, photoUploadAction } from "./actions";
 import { useConfirm } from "@/components/ui/confirm";
 
 export type Photo = { id: string; pose: string; takenOn: string; url: string | null };
@@ -21,15 +21,7 @@ const fmt = (d: string) =>
     timeZone: "UTC",
   }).format(new Date(`${d}T00:00:00Z`));
 
-export function Photos({
-  userId,
-  photos,
-  enabled,
-}: {
-  userId: string;
-  photos: Photo[];
-  enabled: boolean;
-}) {
+export function Photos({ photos, enabled }: { photos: Photo[]; enabled: boolean }) {
   const ask = useConfirm();
   const input = useRef<HTMLInputElement>(null);
   const [pose, setPose] = useState("front");
@@ -44,12 +36,10 @@ export function Photos({
         // Storage refuses uploads past the limit too; this just says why up front.
         if (photos.length >= PHOTO_LIMIT) throw new Error(photoLimitMessage);
         const blob = await shrinkImage(file);
-        const path = `${userId}/${crypto.randomUUID()}.jpg`;
-        const { error: upErr } = await createSupabaseBrowserClient()
-          .storage.from(photoBucket)
-          .upload(path, blob, { contentType: "image/jpeg" });
-        if (upErr) throw upErr;
-        const res = await addPhotoAction({ pose, takenOn: today(), storagePath: path });
+        const link = await photoUploadAction();
+        if ("error" in link) throw new Error(link.error);
+        await uploadToLink(photoBucket, link, blob);
+        const res = await addPhotoAction({ pose, takenOn: today(), storagePath: link.path });
         if (res.error) throw new Error(res.error);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Upload failed");

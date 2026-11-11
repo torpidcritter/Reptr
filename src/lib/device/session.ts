@@ -4,8 +4,8 @@ import { hasUnsyncedOps, useOutbox } from "@/lib/outbox";
 import { hasUnsyncedWorkout, useWorkoutStore } from "@/lib/workout-store";
 import { clearPageCaches, currentAccount, wipeAccount } from "./scope";
 
-// Moments when the signed-in account changes on this device: signing out, deleting the
-// account. Both stop syncing first, so nothing is sent halfway through.
+// Moments when the profile on this device changes: removing it from the device,
+// deleting it. Both stop syncing first, so nothing is sent halfway through.
 
 let paused = false;
 
@@ -26,19 +26,19 @@ export function pendingChanges() {
 /**
  * Leaves the account on this device. If nothing is waiting to sync, the account's device
  * data is deleted. If something is, it stays stored under this account only (another
- * account can't read or send it) and syncs the next time this account signs in here.
+ * account can't read or send it) and syncs the next time this profile is opened here.
  * Cached pages are always cleared, and the page reloads so no memory carries over.
  */
-export async function leaveAccount(signOut: () => Promise<unknown>, keepPending: boolean) {
+export async function leaveAccount(forget: () => Promise<unknown>, keepPending: boolean) {
   paused = true;
   const id = currentAccount();
   try {
     if (id && !(keepPending && pendingChanges().any)) await wipeAccount(id);
     else await clearPageCaches();
-    await signOut();
+    await forget();
   } finally {
     useWorkoutStore.setState({ workout: null });
-    window.location.replace("/login");
+    window.location.replace("/create-profile");
   }
 }
 
@@ -47,7 +47,7 @@ export async function forgetDeletedAccount() {
   paused = true;
   const id = currentAccount();
   if (id) await wipeAccount(id);
-  window.location.replace("/login?deleted=1");
+  window.location.replace("/create-profile");
 }
 
 /**

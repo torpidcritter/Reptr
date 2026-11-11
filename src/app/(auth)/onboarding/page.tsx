@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Card } from "@/components/ui/card";
 import { getProfile, requireUser } from "@/lib/auth";
+import { CREATE_PROFILE_PATH } from "@/lib/identity-cookie";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata: Metadata = { title: "Set up" };
@@ -11,7 +12,8 @@ export const metadata: Metadata = { title: "Set up" };
 async function AlreadyOnboarded() {
   const user = await requireUser();
   const profile = await getProfile(user.id);
-  if (profile?.onboardedAt) redirect("/");
+  if (!profile?.username) redirect(CREATE_PROFILE_PATH);
+  if (profile.onboardedAt) redirect("/");
   return null;
 }
 

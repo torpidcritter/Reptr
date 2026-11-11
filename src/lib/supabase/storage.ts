@@ -1,13 +1,12 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseServerClient } from "./server";
+import { storageAdmin, storageConfigured } from "./admin";
 import { orphanedFiles, type StoredFile } from "./storage-rules";
 
 export { orphanedFiles } from "./storage-rules";
 
-/** Photos need Supabase Storage; local dev without Supabase stores none. */
-export const storageEnabled = () =>
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+/** Photos need Supabase Storage and its service key; without them none are stored. */
+export const storageEnabled = storageConfigured;
 
 /** A storage call that failed, or files that are still there after a delete. */
 export class StorageError extends Error {
@@ -24,17 +23,25 @@ const PAGE = 1000;
 const CHUNK = 100;
 
 /**
- * The signed-in user's client by default, so storage policies apply. Tests against a
- * real Supabase project pass their own.
+ * The server's storage client by default. Callers pass only paths inside the current
+ * profile's folder. Tests against a real Supabase project pass their own.
  */
 type Client = Pick<SupabaseClient, "storage">;
-const clientOr = async (c?: Client) => c ?? (await createSupabaseServerClient());
+const clientOr = async (c?: Client) => c ?? storageAdmin();
+
+/** A one-time link the browser uploads one file to. Expires after two hours. */
+export async function signedUpload(bucket: string, path: string) {
+  const { data, error } = await storageAdmin().storage.from(bucket).createSignedUploadUrl(path);
+  if (error || !data) throw new StorageError(`Couldn't prepare the upload: ${error?.message}`);
+  return { path: data.path, token: data.token };
+}
 
 /** Short-lived links to private files. Missing files come back without a URL. */
 export async function signedUrls(bucket: string, paths: string[], expiresIn = 3600) {
   if (!paths.length || !storageEnabled()) return new Map<string, string>();
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, expiresIn);
+  const { data, error } = await storageAdmin()
+    .storage.from(bucket)
+    .createSignedUrls(paths, expiresIn);
   if (error) throw new StorageError(`Couldn't create photo links: ${error.message}`);
   return new Map(
     (data ?? []).filter((d) => d.signedUrl && d.path).map((d) => [d.path!, d.signedUrl]),

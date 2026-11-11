@@ -12,7 +12,8 @@ async function as(browser: Browser, id: string) {
 
 async function setUpProfile(page: Page, handle: string) {
   await page.goto("/social/profile");
-  await page.getByLabel("Handle").fill(handle);
+  // The handle is the username from the person's profile.
+  await expect(page.getByText(`@${handle}`)).toBeVisible();
   await page.getByText("Public", { exact: true }).click();
   await expect(page.getByLabel(/Show me on leaderboards/)).toBeChecked();
   await page.getByRole("button", { name: "Create profile" }).click();

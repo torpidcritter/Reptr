@@ -37,7 +37,7 @@ const duplicate = (e: unknown) => {
 // ---------------------------------------------------------------------------
 // Profiles
 
-const RESERVED = new Set([
+export const RESERVED = new Set([
   "admin",
   "administrator",
   "reptr",
@@ -91,7 +91,9 @@ export async function myProfile(db: Database, me: string) {
 
 /**
  * Creates or updates the person's social profile. Switching to public accepts any
- * pending follow requests, since anyone could now follow directly.
+ * pending follow requests, since anyone could now follow directly. The handle, bio and
+ * picture are copied from the person's profile by the database (migration 0034), so
+ * what's passed for them only counts for an account that has no username yet.
  */
 export async function saveProfile(db: Database, me: string, input: ProfileInput) {
   const p = profileSchema.parse(input);
@@ -136,16 +138,10 @@ async function acceptAll(tx: Database, me: string) {
   await tx.delete(followRequests).where(eq(followRequests.targetId, me));
 }
 
-/** Sets or clears the avatar path (the file is uploaded to the person's own folder). */
-export async function setAvatar(db: Database, me: string, path: string | null) {
-  if (path && !new RegExp(`^${me}/[0-9a-f-]{36}\\.(jpg|jpeg|png|webp)$`).test(path))
-    throw new SocialError("That picture couldn't be saved.");
-  await withUser(db, me, (tx) =>
-    tx.update(socialProfiles).set({ avatarPath: path }).where(eq(socialProfiles.userId, me)),
-  );
-}
-
-/** Leaves social features: profile, follows, posts, likes and comments are deleted. */
+/**
+ * Leaves social features: the social profile, follows, posts, likes and comments are
+ * deleted. The person's own profile (username, bio, picture) stays.
+ */
 export async function leaveSocial(db: Database, me: string) {
   await withUser(db, me, (tx) => tx.delete(socialProfiles).where(eq(socialProfiles.userId, me)));
 }

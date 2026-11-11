@@ -3,22 +3,32 @@
 import { Camera, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
+import { avatarUploadAction, setAvatarAction } from "@/app/(app)/profile/identity-actions";
 import { Avatar } from "@/components/social/avatar";
 import { Button } from "@/components/ui/button";
 import { shrinkImage } from "@/lib/images";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { avatarBucket, avatarPath } from "@/modules/social/avatars";
-import { setAvatarAction } from "../actions";
+import { uploadToLink } from "@/lib/upload";
+import { avatarBucket } from "@/modules/social/avatars";
 
-/** Uploads a profile picture to the person's own folder, then points the profile at it. */
+/** Shrinks a picture, uploads it to the profile's own folder and makes it the picture. */
+export async function uploadAvatar(file: File) {
+  const blob = await shrinkImage(file, 400, 0.85);
+  const link = await avatarUploadAction();
+  if ("error" in link) throw new Error(link.error);
+  await uploadToLink(avatarBucket, link, blob);
+  const res = await setAvatarAction(link.path);
+  if (res.error) throw new Error(res.error);
+}
+
+export const ACCEPT = "image/jpeg,image/png,image/webp";
+
+/** The profile picture with change and remove buttons (saved straight away). */
 export function AvatarPicker({
-  userId,
   name,
   handle,
   url,
   enabled,
 }: {
-  userId: string;
   name: string | null;
   handle: string;
   url: string | null;
@@ -33,14 +43,7 @@ export function AvatarPicker({
     start(async () => {
       setError(null);
       try {
-        const blob = await shrinkImage(file, 400, 0.85);
-        const path = avatarPath(userId, crypto.randomUUID());
-        const { error: upErr } = await createSupabaseBrowserClient()
-          .storage.from(avatarBucket)
-          .upload(path, blob, { contentType: "image/jpeg" });
-        if (upErr) throw upErr;
-        const res = await setAvatarAction(path);
-        if (res.error) throw new Error(res.error);
+        await uploadAvatar(file);
         router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Upload failed");
@@ -83,8 +86,9 @@ export function AvatarPicker({
           <input
             ref={input}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept={ACCEPT}
             className="hidden"
+            aria-label="Profile picture"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) upload(f);
@@ -98,7 +102,7 @@ export function AvatarPicker({
           )}
         </div>
       ) : (
-        <p className="text-muted-foreground text-sm">Profile pictures need Supabase storage.</p>
+        <p className="text-muted-foreground text-sm">Profile pictures aren&apos;t available yet.</p>
       )}
     </div>
   );

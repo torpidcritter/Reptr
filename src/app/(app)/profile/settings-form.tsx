@@ -105,10 +105,6 @@ export function SettingsForm({ profile }: { profile: Profile }) {
 
   return (
     <form action={action} className="flex flex-col gap-4">
-      <Field label="Name" error={e.displayName}>
-        <Input name="displayName" defaultValue={profile.displayName ?? ""} maxLength={60} />
-      </Field>
-
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1.5 text-sm font-medium">Units</legend>
         <div className="bg-muted grid grid-cols-2 gap-1 rounded-xl p-1">

@@ -35,13 +35,28 @@ keep the migrations, which the old code ignores. A migration that fails halfway:
 For later releases the same pattern holds: `db:status`, then `db:migrate:to <newest>`,
 then merge.
 
+### Profiles without sign-in (migration 0034)
+
+1. Add `SUPABASE_SERVICE_ROLE_KEY` in Vercel (Production, server only, never
+   `NEXT_PUBLIC_`). Without it the app works but profile pictures and progress photos
+   are off.
+2. `pnpm db:migrate:to 0034 --yes`. It first checks the connection may add an account
+   row and stops before changing anything if not. The old code ignores the new columns.
+3. Merge the PR; Vercel deploys it. Old sign-in links and `/login` now go to the app.
+4. Accounts made with email sign-in: `pnpm ops:profile-key list`, then
+   `pnpm ops:profile-key <email>` prints a profile key. The owner enters it under
+   "Already have a profile?" and picks a username. Accounts that had a social handle
+   already have it as their username.
+5. Smoke test: in a private window, create a profile; reload; edit it; remove it from the
+   device; open it again with the key.
+
 ## Vercel settings
 
 | Setting                                  | Value                                        | Why                                                                                                                        | Status                                                                           |
 | ---------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Function region                          | `sin1` (from `vercel.json`)                  | Same region as the Supabase database (Singapore). Each query otherwise crosses an ocean.                                   | In repo; **verify on the next deploy** (Deployment → Functions shows the region) |
 | Skew Protection                          | On (Settings → Advanced), max age ≥ 12 hours | Keeps the previous build's server actions answering for tabs opened before a deploy, so a phone mid-workout keeps syncing. | **Not set** (needs Pro)                                                          |
-| `NEXT_PUBLIC_SITE_URL`                   | `https://reptr-three.vercel.app`             | Sign-in links and redirects never come from request headers.                                                               | **Not verified**                                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`              | project service key (server only)            | Profile pictures and progress photos. There is no Supabase sign-in, so the server stores files for each profile.           | **Not set**                                                                      |
 | `DATABASE_URL`                           | transaction pooler, port 6543                | See `DATABASE_SECURITY.md`.                                                                                                | Set                                                                              |
 | `NEXT_PUBLIC_SUPABASE_URL`, `…_ANON_KEY` | project values                               |                                                                                                                            | Set                                                                              |
 | `ERROR_WEBHOOK_URL`                      | a private channel webhook                    | See `MONITORING.md`.                                                                                                       | **Not set**                                                                      |

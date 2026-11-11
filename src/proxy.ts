@@ -1,38 +1,38 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { CREATE_PROFILE_PATH, IDENTITY_COOKIE, identityCookieOptions } from "@/lib/identity-cookie";
 
-const PUBLIC_PATHS = ["/login", "/auth/", "/offline", "/api/health"];
+const PUBLIC_PATHS = [CREATE_PROFILE_PATH, "/offline", "/api/health"];
 
-/** Keeps the Supabase session fresh and sends signed-out visitors to the login page. */
-export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return response;
+/** Local use acting as a fixed account (see lib/auth.ts): nobody needs a profile cookie. */
+const devIdentity = () =>
+  (process.env.NODE_ENV === "development" || process.env.REPTR_LOCAL === "1") &&
+  Boolean(process.env.REPTR_DEV_USER_ID || process.env.REPTR_DEMO === "1") &&
+  !process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  const supabase = createServerClient(url, anonKey, {
-    cookies: {
-      getAll: () => request.cookies.getAll(),
-      setAll: (cookiesToSet) => {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
-        );
-      },
-    },
-  });
-
-  const { data } = await supabase.auth.getClaims();
+/**
+ * Sends visitors this browser has no profile for to "Let's create your profile.", and
+ * keeps the profile cookie from expiring while the app is used. Whether the cookie is
+ * valid is checked by the server on each request (lib/auth.ts), not here.
+ */
+export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p));
+  const token = request.cookies.get(IDENTITY_COOKIE)?.value;
+  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
-  if (!data?.claims && !isPublic) {
-    const login = request.nextUrl.clone();
-    login.pathname = "/login";
-    login.search = "";
-    return NextResponse.redirect(login);
+  // End-to-end tests can opt back into the real behaviour (see lib/auth.ts).
+  const e2eProfile =
+    process.env.REPTR_E2E === "1" &&
+    process.env.NODE_ENV === "development" &&
+    request.cookies.get("reptr-e2e-user")?.value === "profile";
+
+  if (!token && !isPublic && (e2eProfile || !devIdentity())) {
+    const to = request.nextUrl.clone();
+    to.pathname = CREATE_PROFILE_PATH;
+    to.search = "";
+    return NextResponse.redirect(to);
   }
+  const response = NextResponse.next({ request });
+  if (token) response.cookies.set(IDENTITY_COOKIE, token, identityCookieOptions());
   return response;
 }
 

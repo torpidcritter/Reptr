@@ -10,8 +10,13 @@ import { db } from "@/db";
 import { getProfile, getTimeZone, requireUser } from "@/lib/auth";
 import { isModerator } from "@/modules/community/moderation";
 import { recentAudit } from "@/modules/ops/audit";
-import { deleteAccountAction, signOut } from "./actions";
-import { SignOutButton } from "./sign-out-button";
+import { AvatarPicker } from "@/components/profile/avatar-picker";
+import { avatarUrls } from "@/lib/avatar-urls";
+import { storageEnabled } from "@/lib/supabase/storage";
+import { deleteAccountAction } from "./actions";
+import { ClearDeviceButton } from "./clear-device-button";
+import { clearDeviceAction } from "./identity-actions";
+import { IdentityForm, ProfileKeyCard } from "./identity-form";
 import { DeleteAccount } from "./delete-account";
 import { SettingsForm } from "./settings-form";
 
@@ -47,7 +52,7 @@ async function Activity({ userId }: { userId: string }) {
         </ul>
       ) : (
         <p className="text-muted-foreground mt-2 text-sm">
-          Sign-ins, downloads and other account changes will be listed here.
+          Profile changes, downloads and other account changes will be listed here.
         </p>
       )}
     </Card>
@@ -57,31 +62,54 @@ async function Activity({ userId }: { userId: string }) {
 async function ProfileBody() {
   const user = await requireUser();
   const profile = await getProfile(user.id);
+  const urls = await avatarUrls([profile?.avatarPath]);
   return (
     <>
-      <PageHeader title={profile?.displayName ?? "Profile"} subtitle={user.email} />
+      <PageHeader
+        title={profile?.displayName ?? "Profile"}
+        subtitle={profile?.username ? `@${profile.username}` : undefined}
+      />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card>
-          <CardLabel>Training settings</CardLabel>
-          <div className="mt-3">
-            {profile && (
-              <SettingsForm
-                profile={{
-                  displayName: profile.displayName,
-                  unitSystem: profile.unitSystem,
-                  heightCm: profile.heightCm,
-                  goal: profile.goal,
-                  experience: profile.experience,
-                  trainingDays: profile.trainingDays,
-                  equipment: profile.equipment,
-                  trackNutrition: profile.trackNutrition,
-                  trackRecovery: profile.trackRecovery,
-                  defaultRestSeconds: profile.defaultRestSeconds,
-                }}
-              />
-            )}
-          </div>
-        </Card>
+        <div className="flex flex-col gap-4">
+          <Card className="flex flex-col gap-4" id="your-profile">
+            <CardLabel>Your profile</CardLabel>
+            <AvatarPicker
+              name={profile?.displayName ?? null}
+              handle={profile?.username ?? "?"}
+              url={urls.get(profile?.avatarPath ?? "") ?? null}
+              enabled={storageEnabled()}
+            />
+            <IdentityForm
+              initial={{
+                displayName: profile?.displayName ?? "",
+                username: profile?.username ?? "",
+                contactEmail: profile?.contactEmail ?? "",
+                bio: profile?.bio ?? "",
+              }}
+            />
+          </Card>
+          <Card>
+            <CardLabel>Training settings</CardLabel>
+            <div className="mt-3">
+              {profile && (
+                <SettingsForm
+                  profile={{
+                    displayName: profile.displayName,
+                    unitSystem: profile.unitSystem,
+                    heightCm: profile.heightCm,
+                    goal: profile.goal,
+                    experience: profile.experience,
+                    trainingDays: profile.trainingDays,
+                    equipment: profile.equipment,
+                    trackNutrition: profile.trackNutrition,
+                    trackRecovery: profile.trackRecovery,
+                    defaultRestSeconds: profile.defaultRestSeconds,
+                  }}
+                />
+              )}
+            </div>
+          </Card>
+        </div>
         <div className="flex flex-col gap-4">
           <Card>
             <CardLabel>More</CardLabel>
@@ -151,7 +179,11 @@ async function ProfileBody() {
           <Suspense fallback={null}>
             <Activity userId={user.id} />
           </Suspense>
-          <SignOutButton signOut={signOut} />
+          <Card className="flex flex-col gap-3">
+            <CardLabel>Profile key</CardLabel>
+            <ProfileKeyCard />
+          </Card>
+          <ClearDeviceButton clearDevice={clearDeviceAction} />
           <Card>
             <DeleteAccount deleteAccountAction={deleteAccountAction} />
           </Card>

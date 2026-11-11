@@ -62,7 +62,7 @@ function Choice({
 }
 
 const steps = [
-  { title: "About you", fields: ["displayName", "age", "height", "weight", "unitSystem"] },
+  { title: "About you", fields: ["age", "height", "weight", "unitSystem"] },
   { title: "Your goal", fields: ["goal", "experience"] },
   { title: "Your week", fields: ["trainingDays", "equipment"] },
 ];
@@ -104,9 +104,6 @@ export function OnboardingForm() {
       </div>
 
       <div className={cn("flex flex-col gap-5", step !== 0 && "hidden")}>
-        <Field label="Your name" error={e.displayName}>
-          <Input name="displayName" autoComplete="given-name" maxLength={60} />
-        </Field>
         <fieldset className="flex flex-col gap-1.5">
           <legend className="mb-1.5 text-sm font-medium">Units</legend>
           <div className="bg-muted grid grid-cols-2 gap-1 rounded-xl p-1">

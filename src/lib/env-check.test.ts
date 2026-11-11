@@ -41,12 +41,13 @@ describe("production environment check", () => {
     expect(productionEnvProblems({ VERCEL_ENV: "preview" })).toEqual([]);
   });
 
-  it("needs a site address in production but not in previews", () => {
-    const rest = without(deployed, "NEXT_PUBLIC_SITE_URL");
-    expect(productionEnvProblems(rest)).toHaveLength(1);
-    expect(productionEnvProblems({ ...rest, VERCEL_ENV: "preview" })).toEqual([]);
+  it("refuses a storage key that would reach the browser", () => {
     expect(
-      productionEnvProblems({ ...rest, VERCEL_PROJECT_PRODUCTION_URL: "r.vercel.app" }),
-    ).toEqual([]);
+      productionEnvProblems({ ...deployed, NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: "x" }),
+    ).toHaveLength(1);
+  });
+
+  it("no longer needs a site address, since there are no sign-in emails", () => {
+    expect(productionEnvProblems(without(deployed, "NEXT_PUBLIC_SITE_URL"))).toEqual([]);
   });
 });
