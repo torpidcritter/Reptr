@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { CREATE_PROFILE_PATH, IDENTITY_COOKIE, identityCookieOptions } from "@/lib/identity-cookie";
+import { CREATE_PROFILE_PATH, IDENTITY_COOKIE } from "@/lib/identity-cookie";
 
 const PUBLIC_PATHS = [CREATE_PROFILE_PATH, "/offline", "/api/health"];
 
@@ -10,9 +10,12 @@ const devIdentity = () =>
   !process.env.NEXT_PUBLIC_SUPABASE_URL;
 
 /**
- * Sends visitors this browser has no profile for to "Let's create your profile.", and
- * keeps the profile cookie from expiring while the app is used. Whether the cookie is
- * valid is checked by the server on each request (lib/auth.ts), not here.
+ * Sends visitors this browser has no profile for to "Let's create your profile.".
+ * Whether the cookie is valid is checked by the server on each request (lib/auth.ts).
+ *
+ * The proxy never sets cookies: a Set-Cookie on every page response stops partially
+ * prerendered pages on Vercel from streaming in their content (they stay on
+ * "Loading…"). The cookie is renewed once a day by /api/profile/renew instead.
  */
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -31,9 +34,7 @@ export function proxy(request: NextRequest) {
     to.search = "";
     return NextResponse.redirect(to);
   }
-  const response = NextResponse.next({ request });
-  if (token) response.cookies.set(IDENTITY_COOKIE, token, identityCookieOptions());
-  return response;
+  return NextResponse.next({ request });
 }
 
 export const config = {

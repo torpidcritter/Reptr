@@ -4,6 +4,7 @@ import { AccountScope } from "@/components/layout/account-scope";
 import { BottomNav, Sidebar } from "@/components/layout/app-nav";
 import { DeviceAlerts } from "@/components/layout/device-alerts";
 import { OutboxSyncer } from "@/components/layout/outbox-syncer";
+import { ProfileCookieRenewer } from "@/components/layout/profile-cookie-renewer";
 import { TimezoneCookie } from "@/components/layout/timezone-cookie";
 import { ActiveWorkoutPill } from "@/components/workout/active-workout-pill";
 import { WorkoutSyncer } from "@/components/workout/workout-syncer";
@@ -74,6 +75,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       <WorkoutSyncer />
       <OutboxSyncer />
       <TimezoneCookie />
+      <ProfileCookieRenewer />
       <Suspense fallback={null}>
         <ActiveWorkoutPill />
       </Suspense>
