@@ -1,5 +1,6 @@
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import postgres from "postgres";
 import { connection, type NextRequest } from "next/server";
 import { db, schema } from "@/db";
 import { getProfile, getTimeZone } from "@/lib/auth";
@@ -74,6 +75,18 @@ export async function GET(request: NextRequest) {
     await run("workout history", () => listWorkoutHistory(db, userId, { limit: 1 }));
     await run("fatigue", () => fatigueFor(db, userId, tz));
   }
+  if (request.nextUrl.searchParams.has("burst")) {
+    await run(
+      "connection setup",
+      async () => connectionSetup(),
+      (v) => v,
+    );
+    await run(
+      "20 connections at once",
+      () => burst(20),
+      (v) => v,
+    );
+  }
   return Response.json(
     {
       build: process.env.NEXT_PUBLIC_BUILD_ID ?? null,
@@ -109,4 +122,37 @@ async function missingColumns() {
     }
   }
   return missing;
+}
+
+/** Which kind of connection the app uses (never the password or the full address). */
+function connectionSetup() {
+  const url = new URL(process.env.DATABASE_URL ?? "postgres://unset");
+  const pooler = url.hostname.includes("pooler.supabase.com");
+  return `port ${url.port || "5432"}, ${pooler ? "Supabase pooler" : "direct"}${
+    pooler ? (url.port === "6543" ? " (transaction mode)" : " (session mode)") : ""
+  }`;
+}
+
+/**
+ * Opens `n` connections at once, as several pages loading together would, and reports
+ * how many failed and why. Its own short-lived client, closed straight after.
+ */
+async function burst(n: number) {
+  const client = postgres(process.env.DATABASE_URL!, {
+    prepare: false,
+    max: n,
+    connect_timeout: 10,
+  });
+  try {
+    const results = await Promise.allSettled(
+      Array.from({ length: n }, () => client`select pg_sleep(0.3)`),
+    );
+    const errors = results.flatMap((r) =>
+      r.status === "rejected" ? [String(r.reason?.message ?? r.reason)] : [],
+    );
+    const reasons = [...new Set(errors)].join("; ").slice(0, 300);
+    return errors.length ? `${errors.length} of ${n} failed: ${reasons}` : `all ${n} worked`;
+  } finally {
+    await client.end({ timeout: 2 });
+  }
 }
