@@ -54,6 +54,12 @@ export async function GET(request: NextRequest) {
     (missing) => (missing.length ? `missing: ${missing.join(", ")}` : "all present"),
   );
 
+  await run(
+    "stuck database work",
+    () => stuckWork(),
+    (v) => v,
+  );
+
   const token = request.cookies.get(IDENTITY_COOKIE)?.value;
   const userId = await run(
     "profile cookie",
@@ -155,4 +161,29 @@ async function burst(n: number) {
   } finally {
     await client.end({ timeout: 2 });
   }
+}
+
+/**
+ * Database sessions that are stuck: waiting on a lock, or holding a transaction open
+ * for over 10 seconds. Shows only their state, wait reason, age and the first words of
+ * the statement, never its values.
+ */
+async function stuckWork() {
+  const rows = await db.execute<{
+    state: string;
+    wait: string | null;
+    age: number;
+    query: string;
+  }>(sql`
+    select state, wait_event_type || ':' || wait_event as wait,
+           extract(epoch from now() - coalesce(xact_start, query_start))::int as age,
+           left(regexp_replace(query, '[[:space:]]+', ' ', 'g'), 60) as query
+    from pg_stat_activity
+    where datname = current_database() and pid <> pg_backend_pid()
+      and (wait_event_type = 'Lock'
+           or (xact_start is not null and now() - xact_start > interval '10 seconds'))
+    order by age desc limit 8`);
+  const list = Array.from(rows);
+  if (!list.length) return "none";
+  return list.map((r) => `${r.state} ${r.age}s ${r.wait ?? ""} ${r.query}`).join(" | ");
 }
